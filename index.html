@@ -95,6 +95,20 @@
   .install-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .install-banner .btn-sm { margin: 0; }
 
+  .recent-invitees-label { font-size: 0.78rem; color: var(--muted); margin: 12px 0 6px; }
+  .recent-invitees-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .recent-invitees-chips button {
+    width: auto;
+    margin: 0;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border-radius: 999px;
+    background: rgba(120, 224, 143, 0.12);
+    color: var(--accent);
+    border: 1px solid rgba(120, 224, 143, 0.25);
+  }
+
   /* top-level view switch: sign-in vs the app itself */
   .view { display: none; }
   .view.active { display: block; }
@@ -350,6 +364,11 @@
         <h2>Invite someone</h2>
         <p class="sub">They'll see this game as soon as they sign in with this number and accept — nothing else on your calendar becomes visible to them.</p>
         <div id="invite-modal-error" class="error"></div>
+        <button id="pick-contact-btn" class="secondary" type="button" hidden>Pick from contacts</button>
+        <div id="recent-invitees" hidden>
+          <div class="recent-invitees-label">Invited before</div>
+          <div id="recent-invitees-list" class="recent-invitees-chips"></div>
+        </div>
         <label for="inv-phone">Phone number</label>
         <input id="inv-phone" type="tel" value="+91" inputmode="tel" autocomplete="tel" />
         <label for="inv-name">Name (optional)</label>
@@ -376,7 +395,7 @@
       createEvent, updateEvent, deleteEvent, watchMyEvents, splitUpcoming, toTimestamp, getEvent,
     } from './events.js';
     import {
-      sendInvite, watchMyInvites, acceptInvite, declineInvite,
+      sendInvite, watchMyInvites, acceptInvite, declineInvite, getSentInvites,
     } from './invites.js';
 
     const $ = (id) => document.getElementById(id);
@@ -450,6 +469,22 @@
     let currentProfile = null;
     let unsubscribeEvents = null;
     let unsubscribeInvites = null;
+    let recentInvitees = []; // [{phone, name}], most recent first, deduped by phone
+
+    function rebuildRecentInvitees(rawInvites) {
+      const sorted = [...rawInvites].sort(
+        (a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0),
+      );
+      const seen = new Set();
+      const result = [];
+      for (const inv of sorted) {
+        if (!inv.invitedPhone || seen.has(inv.invitedPhone)) continue;
+        seen.add(inv.invitedPhone);
+        result.push({ phone: inv.invitedPhone, name: inv.invitedName || '' });
+        if (result.length >= 6) break;
+      }
+      recentInvitees = result;
+    }
 
     function enterApp(profile) {
       currentProfile = profile;
@@ -463,6 +498,9 @@
       });
       unsubscribeInvites = watchMyInvites(currentUser.phoneNumber, renderInvites, (err) => {
         showAppError(friendlyError(err));
+      });
+      getSentInvites(currentUser.uid).then(rebuildRecentInvitees).catch(() => {
+        recentInvitees = []; // fine to just skip the suggestions if this fails
       });
     }
 
@@ -739,6 +777,69 @@
       return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
     }
 
+    // Contact Picker API — real support is Chrome/Android only (not
+    // Safari, on iOS or otherwise, installed or not). Feature-detected,
+    // so the button only ever appears where it'll actually work; every
+    // other browser just keeps typing the number by hand, unchanged.
+    const contactPickerSupported = 'contacts' in navigator && 'ContactsManager' in window;
+    if (contactPickerSupported) {
+      $('pick-contact-btn').hidden = false;
+    }
+
+    // Contacts frequently store numbers without a country code
+    // ("98765 43210" rather than "+919876543210"). This fills the field
+    // with a best guess — borrowing the signed-in user's own country
+    // code, since a padel group is usually local — but never sends
+    // anything automatically; the field stays editable and still goes
+    // through the normal Send invite validation.
+    function guessE164(rawTel, myPhone) {
+      let digits = rawTel.replace(/[^\d+]/g, '');
+      if (digits.startsWith('+')) return digits;
+      const match = myPhone && myPhone.match(/^\+(\d{1,3})/);
+      if (!match) return digits;
+      digits = digits.replace(/^0+/, ''); // strip a local trunk-dial 0, if present
+      return `+${match[1]}${digits}`;
+    }
+
+    $('pick-contact-btn').addEventListener('click', async () => {
+      try {
+        const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+        if (!contacts || !contacts.length) return; // user backed out of the picker
+        const chosen = contacts[0];
+        const rawTel = chosen.tel && chosen.tel[0];
+        if (!rawTel) {
+          showInviteModalError("That contact doesn't have a phone number saved.");
+          return;
+        }
+        clearInviteModalError();
+        $('inv-phone').value = guessE164(rawTel, currentUser.phoneNumber);
+        $('inv-name').value = (chosen.name && chosen.name[0]) || '';
+      } catch {
+        // Picker was dismissed or blocked — nothing to show an error
+        // for, they can just type the number instead.
+      }
+    });
+
+    function renderRecentInvitees() {
+      const wrap = $('recent-invitees');
+      if (!recentInvitees.length) {
+        wrap.hidden = true;
+        return;
+      }
+      wrap.hidden = false;
+      $('recent-invitees-list').innerHTML = recentInvitees
+        .map((r, i) => `<button type="button" class="recent-chip" data-idx="${i}">${escapeHtml(r.name || r.phone)}</button>`)
+        .join('');
+      document.querySelectorAll('.recent-chip').forEach((btn) => {
+        btn.onclick = () => {
+          const r = recentInvitees[Number(btn.dataset.idx)];
+          clearInviteModalError();
+          $('inv-phone').value = r.phone;
+          $('inv-name').value = r.name;
+        };
+      });
+    }
+
     function openInviteModal(ev) {
       invitingEvent = ev;
       clearInviteModalError();
@@ -746,6 +847,7 @@
       $('inv-name').value = '';
       $('invite-step-form').hidden = false;
       $('invite-step-sent').hidden = true;
+      renderRecentInvitees();
       $('invite-modal-backdrop').classList.add('active');
     }
     function closeInviteModal() {
@@ -772,6 +874,7 @@
       setBusy(btn, true, 'Sending…');
       try {
         await sendInvite(invitingEvent.id, phone, name, currentUser.uid);
+        recentInvitees = [{ phone, name }, ...recentInvitees.filter((r) => r.phone !== phone)].slice(0, 6);
         $('whatsapp-nudge-link').href = buildWhatsAppLink(phone, buildInviteMessage(invitingEvent, name));
         $('invite-sent-sub').textContent = name
           ? `${name} will see it once they sign in with that number.`

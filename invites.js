@@ -6,12 +6,24 @@ import {
   collection,
   query,
   where,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   runTransaction,
 } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js';
 
 const INVITES = 'invites';
+
+// One-time fetch of invites the current user has sent (any status) —
+// used to build a "invited before" quick-pick list. Deliberately no
+// orderBy here to avoid needing another composite index: this dataset
+// is small (one person's own invite history), so sorting/deduping by
+// most-recent happens client-side instead.
+export async function getSentInvites(myUid) {
+  const q = query(collection(db, INVITES), where('invitedBy', '==', myUid));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data());
+}
 
 // Deterministic id: "{eventId}_{invitedPhone}" — see DATA_MODEL.md. This
 // is also why re-inviting the same phone number to the same event, once
