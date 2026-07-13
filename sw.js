@@ -1,9 +1,8 @@
 // Bump this whenever the app-shell file list below changes; old caches
 // get cleaned up automatically on activate.
-const CACHE_NAME = 'nextset-v4';
+const CACHE_NAME = 'nextset-v6';
 
 const APP_SHELL = [
-  './',
   './index.html',
   './auth.js',
   './events.js',
@@ -14,9 +13,24 @@ const APP_SHELL = [
   './icons/icon-512.png',
 ];
 
+// cache.addAll() is all-or-nothing — if even one of these URLs fails to
+// fetch, the whole install rejects and the service worker never
+// activates at all, with no visible error anywhere. That's the leading
+// suspect for why installability has been failing outright. Caching
+// each file individually, with its own catch, means one bad entry
+// can't take the rest down — installation succeeds either way, and any
+// real failure gets logged instead of silently sinking everything.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)),
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.allSettled(
+        APP_SHELL.map((url) =>
+          cache.add(url).catch((err) => {
+            console.error('[NextSet] precache failed for', url, err);
+          }),
+        ),
+      ),
+    ),
   );
   self.skipWaiting();
 });

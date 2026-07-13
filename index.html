@@ -983,10 +983,10 @@
     // ---------------- installability ----------------
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {
-          // Non-fatal — the app works the same without it, just without
-          // offline caching and the install prompt.
-        });
+        navigator.serviceWorker.register('./sw.js').then(
+          (reg) => console.log('[NextSet] service worker registered:', reg.scope),
+          (err) => console.error('[NextSet] service worker registration FAILED:', err),
+        );
       });
 
       // sw.js already does skipWaiting() + clients.claim() so a new
