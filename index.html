@@ -196,6 +196,20 @@
     padding: 24px;
   }
   .modal button { margin-top: 14px; }
+  a.btn-link {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #06210f;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-align: center;
+    text-decoration: none;
+    margin-top: 14px;
+  }
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 </style>
 </head>
@@ -303,15 +317,23 @@
   <!-- ===== invite modal ===== -->
   <div class="modal-backdrop" id="invite-modal-backdrop">
     <div class="modal">
-      <h2>Invite someone</h2>
-      <p class="sub">They'll see this game as soon as they sign in with this number and accept — nothing else on your calendar becomes visible to them.</p>
-      <div id="invite-modal-error" class="error"></div>
-      <label for="inv-phone">Phone number</label>
-      <input id="inv-phone" type="tel" value="+91" inputmode="tel" autocomplete="tel" />
-      <label for="inv-name">Name (optional)</label>
-      <input id="inv-name" type="text" placeholder="So you remember who this is" />
-      <button id="send-invite-btn">Send invite</button>
-      <button id="cancel-invite-btn" class="secondary" type="button">Cancel</button>
+      <div id="invite-step-form">
+        <h2>Invite someone</h2>
+        <p class="sub">They'll see this game as soon as they sign in with this number and accept — nothing else on your calendar becomes visible to them.</p>
+        <div id="invite-modal-error" class="error"></div>
+        <label for="inv-phone">Phone number</label>
+        <input id="inv-phone" type="tel" value="+91" inputmode="tel" autocomplete="tel" />
+        <label for="inv-name">Name (optional)</label>
+        <input id="inv-name" type="text" placeholder="So you remember who this is" />
+        <button id="send-invite-btn">Send invite</button>
+        <button id="cancel-invite-btn" class="secondary" type="button">Cancel</button>
+      </div>
+      <div id="invite-step-sent" hidden>
+        <h2>Invite sent</h2>
+        <p class="sub" id="invite-sent-sub">They'll see it once they sign in with that number.</p>
+        <a id="whatsapp-nudge-link" class="btn-link" href="#" target="_blank" rel="noopener">Open WhatsApp to let them know</a>
+        <button id="invite-done-btn" class="secondary" type="button">Done</button>
+      </div>
     </div>
   </div>
 
@@ -557,7 +579,10 @@
 
     function attachCardHandlers(events) {
       document.querySelectorAll('.invite-btn').forEach((btn) => {
-        btn.onclick = () => openInviteModal(btn.dataset.id);
+        btn.onclick = () => {
+          const ev = events.find((e) => e.id === btn.dataset.id);
+          if (ev) openInviteModal(ev);
+        };
       });
       document.querySelectorAll('.edit-btn').forEach((btn) => {
         btn.onclick = () => {
@@ -662,21 +687,45 @@
     }
 
     // ---------------- invite modal (sending) ----------------
-    let invitingEventId = null;
+    let invitingEvent = null;
 
-    function openInviteModal(eventId) {
-      invitingEventId = eventId;
+    function appUrlForSharing() {
+      return window.location.origin + window.location.pathname;
+    }
+
+    // Not automatic sending — this builds a WhatsApp "click to chat" link
+    // pre-filled with a message. The inviter still has to tap send inside
+    // WhatsApp themselves; there's no way to push a message on someone's
+    // behalf without WhatsApp's Business API, which is a much bigger,
+    // paid, business-verification-gated thing this app doesn't need.
+    function buildInviteMessage(ev, invitedName) {
+      const where = ev.location + (ev.court ? ` (${ev.court})` : '');
+      return `Hey${invitedName ? ' ' + invitedName : ''}! I've invited you to a padel game — `
+        + `${formatWhen(ev)} at ${where}. Open ${appUrlForSharing()} and sign in with `
+        + `this number to see it and accept.`;
+    }
+
+    function buildWhatsAppLink(phone, message) {
+      const digits = phone.replace(/[^\d]/g, ''); // wa.me wants digits only, no '+'
+      return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+    }
+
+    function openInviteModal(ev) {
+      invitingEvent = ev;
       clearInviteModalError();
       $('inv-phone').value = '+91';
       $('inv-name').value = '';
+      $('invite-step-form').hidden = false;
+      $('invite-step-sent').hidden = true;
       $('invite-modal-backdrop').classList.add('active');
     }
     function closeInviteModal() {
       $('invite-modal-backdrop').classList.remove('active');
-      invitingEventId = null;
+      invitingEvent = null;
     }
 
     $('cancel-invite-btn').addEventListener('click', closeInviteModal);
+    $('invite-done-btn').addEventListener('click', closeInviteModal);
 
     $('send-invite-btn').addEventListener('click', async () => {
       clearInviteModalError();
@@ -693,8 +742,13 @@
       const btn = $('send-invite-btn');
       setBusy(btn, true, 'Sending…');
       try {
-        await sendInvite(invitingEventId, phone, name, currentUser.uid);
-        closeInviteModal();
+        await sendInvite(invitingEvent.id, phone, name, currentUser.uid);
+        $('whatsapp-nudge-link').href = buildWhatsAppLink(phone, buildInviteMessage(invitingEvent, name));
+        $('invite-sent-sub').textContent = name
+          ? `${name} will see it once they sign in with that number.`
+          : "They'll see it once they sign in with that number.";
+        $('invite-step-form').hidden = true;
+        $('invite-step-sent').hidden = false;
       } catch (err) {
         if (err && err.code === 'permission-denied') {
           showInviteModalError('Could not send — this number may already have a pending invite to this game.');
