@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Padel Schedule — Sign in</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #121933;
+    --panel-2: #1a2345;
+    --text: #eef2ff;
+    --muted: #aab4d6;
+    --accent: #78e08f;
+    --border: rgba(255, 255, 255, 0.08);
+    --warn-bg: rgba(255, 212, 121, 0.08);
+    --warn-border: rgba(255, 212, 121, 0.25);
+    --warn-text: #ffe9b8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 380px;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 24px;
+  }
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 6px; }
+  p.sub { color: var(--muted); font-size: 0.88rem; margin: 0 0 20px; line-height: 1.5; }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+  input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: rgba(26, 35, 69, 0.7);
+    color: var(--text);
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #06210f;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    margin-top: 10px;
+    font-weight: 500;
+  }
+  .error {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    color: var(--warn-text);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+    display: none;
+  }
+  .error.show { display: block; }
+  .step { display: none; }
+  .step.active { display: block; }
+  .signed-in { text-align: center; }
+  .signed-in .name { font-size: 1.2rem; font-weight: 600; margin-bottom: 4px; }
+  .signed-in .phone { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div id="error" class="error"></div>
+
+    <div id="step-phone" class="step active">
+      <h1>Sign in</h1>
+      <p class="sub">Enter your mobile number and we'll text you a code.</p>
+      <label for="phone">Phone number</label>
+      <input id="phone" type="tel" value="+91" inputmode="tel" autocomplete="tel" />
+      <button id="send-code-btn">Send code</button>
+    </div>
+
+    <div id="step-code" class="step">
+      <h1>Enter the code</h1>
+      <p class="sub" id="code-sub">We sent a 6-digit code by SMS.</p>
+      <label for="code">Verification code</label>
+      <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" />
+      <button id="verify-code-btn">Verify</button>
+      <button id="change-number-btn" class="secondary" type="button">Use a different number</button>
+    </div>
+
+    <div id="step-name" class="step">
+      <h1>What should we call you?</h1>
+      <p class="sub">This is the name your padel group will see.</p>
+      <label for="name">Your name</label>
+      <input id="name" type="text" autocomplete="name" placeholder="e.g. Rohit Ramaswamy" />
+      <button id="save-name-btn">Continue</button>
+    </div>
+
+    <div id="step-signed-in" class="step">
+      <div class="signed-in">
+        <div class="name" id="signed-in-name"></div>
+        <div class="phone" id="signed-in-phone"></div>
+        <p class="sub">You're in. The calendar goes here next.</p>
+        <button id="sign-out-btn" class="secondary" type="button">Sign out</button>
+      </div>
+    </div>
+
+    <div id="recaptcha-container"></div>
+  </div>
+
+  <script type="module">
+    import {
+      sendCode, verifyCode, getMyProfile, createMyProfile, watchAuthState, signOutUser,
+    } from './auth.js';
+
+    const steps = {
+      phone: document.getElementById('step-phone'),
+      code: document.getElementById('step-code'),
+      name: document.getElementById('step-name'),
+      signedIn: document.getElementById('step-signed-in'),
+    };
+    const errorEl = document.getElementById('error');
+    let currentUser = null;
+
+    function showStep(key) {
+      Object.values(steps).forEach((el) => el.classList.remove('active'));
+      steps[key].classList.add('active');
+    }
+
+    function showError(message) {
+      errorEl.textContent = message;
+      errorEl.classList.add('show');
+    }
+
+    function clearError() {
+      errorEl.textContent = '';
+      errorEl.classList.remove('show');
+    }
+
+    function setBusy(button, busy, busyLabel) {
+      button.disabled = busy;
+      if (busy) {
+        button.dataset.originalLabel = button.textContent;
+        button.textContent = busyLabel;
+      } else if (button.dataset.originalLabel) {
+        button.textContent = button.dataset.originalLabel;
+      }
+    }
+
+    function showSignedIn(name, phone) {
+      document.getElementById('signed-in-name').textContent = name;
+      document.getElementById('signed-in-phone').textContent = phone;
+      showStep('signedIn');
+    }
+
+    function friendlyError(err) {
+      const code = err && err.code ? err.code : '';
+      if (code === 'auth/invalid-phone-number') return "That number doesn't look right — include the country code.";
+      if (code === 'auth/too-many-requests') return 'Too many attempts. Wait a bit and try again.';
+      if (code === 'auth/code-expired') return 'That code expired — request a new one.';
+      if (code === 'auth/invalid-verification-code') return "That code doesn't match. Check it and try again.";
+      return (err && err.message) ? err.message : 'Something went wrong. Try again.';
+    }
+
+    document.getElementById('send-code-btn').addEventListener('click', async () => {
+      clearError();
+      const phone = document.getElementById('phone').value.trim();
+      if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+        showError('Enter a full number with country code, like +919876543210.');
+        return;
+      }
+      const btn = document.getElementById('send-code-btn');
+      setBusy(btn, true, 'Sending…');
+      try {
+        await sendCode(phone, 'recaptcha-container');
+        document.getElementById('code-sub').textContent = `We sent a 6-digit code to ${phone}.`;
+        showStep('code');
+      } catch (err) {
+        showError(friendlyError(err));
+      } finally {
+        setBusy(btn, false);
+      }
+    });
+
+    document.getElementById('verify-code-btn').addEventListener('click', async () => {
+      clearError();
+      const code = document.getElementById('code').value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        showError('Enter the 6-digit code from the text message.');
+        return;
+      }
+      const btn = document.getElementById('verify-code-btn');
+      setBusy(btn, true, 'Verifying…');
+      try {
+        const user = await verifyCode(code);
+        currentUser = user;
+        const profile = await getMyProfile(user.uid);
+        if (profile) {
+          showSignedIn(profile.name, profile.phone);
+        } else {
+          showStep('name');
+        }
+      } catch (err) {
+        showError(friendlyError(err));
+      } finally {
+        setBusy(btn, false);
+      }
+    });
+
+    document.getElementById('change-number-btn').addEventListener('click', () => {
+      clearError();
+      showStep('phone');
+    });
+
+    document.getElementById('save-name-btn').addEventListener('click', async () => {
+      clearError();
+      const name = document.getElementById('name').value.trim();
+      if (!name) {
+        showError('Enter a name so your group knows who this is.');
+        return;
+      }
+      const btn = document.getElementById('save-name-btn');
+      setBusy(btn, true, 'Saving…');
+      try {
+        await createMyProfile(currentUser.uid, currentUser.phoneNumber, name);
+        showSignedIn(name, currentUser.phoneNumber);
+      } catch (err) {
+        showError(friendlyError(err));
+      } finally {
+        setBusy(btn, false);
+      }
+    });
+
+    document.getElementById('sign-out-btn').addEventListener('click', async () => {
+      await signOutUser();
+      // Simplest reliable way to get a clean reCAPTCHA state for the
+      // next sign-in attempt, rather than resetting it by hand.
+      window.location.reload();
+    });
+
+    // Page refresh with an existing session skips straight past step 1 —
+    // Firebase persists the session in IndexedDB by default.
+    watchAuthState(async (user) => {
+      if (user && !currentUser) {
+        currentUser = user;
+        const profile = await getMyProfile(user.uid);
+        if (profile) {
+          showSignedIn(profile.name, profile.phone);
+        } else {
+          showStep('name');
+        }
+      }
+    });
+  </script>
+</body>
+</html>
