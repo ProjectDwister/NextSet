@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Padel Schedule — Sign in</title>
+<title>Padel Schedule</title>
 <style>
   :root {
     --bg: #0b1020;
@@ -21,25 +21,15 @@
   body {
     margin: 0;
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     font-family: system-ui, sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding: 24px;
-  }
-  .card {
-    width: 100%;
-    max-width: 380px;
-    background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 28px 24px;
   }
   h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 6px; }
+  h2 { margin: 0 0 6px; }
   p.sub { color: var(--muted); font-size: 0.88rem; margin: 0 0 20px; line-height: 1.5; }
-  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; margin-top: 12px; }
+  label:first-of-type { margin-top: 0; }
   input {
     width: 100%;
     padding: 10px 12px;
@@ -48,7 +38,7 @@
     background: rgba(26, 35, 69, 0.7);
     color: var(--text);
     font-size: 0.95rem;
-    margin-bottom: 14px;
+    font-family: inherit;
   }
   input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   button {
@@ -61,6 +51,7 @@
     font-weight: 600;
     font-size: 0.95rem;
     cursor: pointer;
+    font-family: inherit;
   }
   button:disabled { opacity: 0.55; cursor: not-allowed; }
   button.secondary {
@@ -70,6 +61,7 @@
     margin-top: 10px;
     font-weight: 500;
   }
+  button.danger { color: #ffb4b4; border-color: rgba(255, 120, 120, 0.3); }
   .error {
     background: var(--warn-bg);
     border: 1px solid var(--warn-border);
@@ -81,82 +73,231 @@
     display: none;
   }
   .error.show { display: block; }
+
+  /* top-level view switch: sign-in vs the app itself */
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* --- sign-in card --- */
+  .auth-center {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 380px;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 24px;
+  }
   .step { display: none; }
   .step.active { display: block; }
-  .signed-in { text-align: center; }
-  .signed-in .name { font-size: 1.2rem; font-weight: 600; margin-bottom: 4px; }
-  .signed-in .phone { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+  .step input, .step button { margin-bottom: 14px; }
+
+  /* --- app shell --- */
+  .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .app-title { font-weight: 700; font-size: 1.05rem; }
+  .app-user { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+  .app-header-right { display: flex; gap: 8px; }
+  .btn-sm { width: auto; padding: 8px 14px; font-size: 0.85rem; border-radius: 8px; margin: 0; }
+  .app-main { max-width: 720px; margin: 0 auto; padding: 20px; }
+  .section-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 24px 0 10px;
+    font-weight: 600;
+  }
+  .section-title:first-child { margin-top: 0; }
+  .section-title.muted { opacity: 0.6; }
+  .empty {
+    color: var(--muted);
+    font-size: 0.9rem;
+    padding: 28px 16px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+  }
+  .games-list { display: flex; flex-direction: column; gap: 10px; }
+  .game-card {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+  }
+  .game-card.past { opacity: 0.55; }
+  .game-when { font-weight: 600; font-size: 0.98rem; }
+  .game-where { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+  .game-meta { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(120, 224, 143, 0.12);
+    color: var(--accent);
+    border: 1px solid rgba(120, 224, 143, 0.25);
+  }
+  .tag.warn { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
+  .game-players { color: var(--text); font-size: 0.85rem; margin-top: 10px; }
+  .game-notes { color: var(--muted); font-size: 0.82rem; margin-top: 6px; font-style: italic; }
+  .game-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .game-actions button {
+    width: auto;
+    padding: 7px 12px;
+    font-size: 0.8rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    margin: 0;
+  }
+
+  /* --- new/edit game modal --- */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 8, 20, 0.6);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 10;
+  }
+  .modal-backdrop.active { display: flex; }
+  .modal {
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+  }
+  .modal button { margin-top: 14px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 </style>
 </head>
 <body>
-  <div class="card">
-    <div id="error" class="error"></div>
 
-    <div id="step-phone" class="step active">
-      <h1>Sign in</h1>
-      <p class="sub">Enter your mobile number and we'll text you a code.</p>
-      <label for="phone">Phone number</label>
-      <input id="phone" type="tel" value="+91" inputmode="tel" autocomplete="tel" />
-      <button id="send-code-btn">Send code</button>
-    </div>
+  <!-- ===== sign-in ===== -->
+  <div class="view active" id="view-auth">
+    <div class="auth-center">
+      <div class="card">
+        <div id="error" class="error"></div>
 
-    <div id="step-code" class="step">
-      <h1>Enter the code</h1>
-      <p class="sub" id="code-sub">We sent a 6-digit code by SMS.</p>
-      <label for="code">Verification code</label>
-      <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" />
-      <button id="verify-code-btn">Verify</button>
-      <button id="change-number-btn" class="secondary" type="button">Use a different number</button>
-    </div>
+        <div id="step-phone" class="step active">
+          <h1>Sign in</h1>
+          <p class="sub">Enter your mobile number and we'll text you a code.</p>
+          <label for="phone">Phone number</label>
+          <input id="phone" type="tel" value="+91" inputmode="tel" autocomplete="tel" />
+          <button id="send-code-btn">Send code</button>
+        </div>
 
-    <div id="step-name" class="step">
-      <h1>What should we call you?</h1>
-      <p class="sub">This is the name your padel group will see.</p>
-      <label for="name">Your name</label>
-      <input id="name" type="text" autocomplete="name" placeholder="e.g. Rohit Ramaswamy" />
-      <button id="save-name-btn">Continue</button>
-    </div>
+        <div id="step-code" class="step">
+          <h1>Enter the code</h1>
+          <p class="sub" id="code-sub">We sent a 6-digit code by SMS.</p>
+          <label for="code">Verification code</label>
+          <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" />
+          <button id="verify-code-btn">Verify</button>
+          <button id="change-number-btn" class="secondary" type="button">Use a different number</button>
+        </div>
 
-    <div id="step-signed-in" class="step">
-      <div class="signed-in">
-        <div class="name" id="signed-in-name"></div>
-        <div class="phone" id="signed-in-phone"></div>
-        <p class="sub">You're in. The calendar goes here next.</p>
-        <button id="sign-out-btn" class="secondary" type="button">Sign out</button>
+        <div id="step-name" class="step">
+          <h1>What should we call you?</h1>
+          <p class="sub">This is the name your padel group will see.</p>
+          <label for="name">Your name</label>
+          <input id="name" type="text" autocomplete="name" placeholder="e.g. Rohit Ramaswamy" />
+          <button id="save-name-btn">Continue</button>
+        </div>
       </div>
     </div>
-
-    <div id="recaptcha-container"></div>
   </div>
+
+  <!-- ===== the app itself ===== -->
+  <div class="view" id="view-app">
+    <header class="app-header">
+      <div>
+        <div class="app-title">Padel Schedule</div>
+        <div class="app-user" id="app-user"></div>
+      </div>
+      <div class="app-header-right">
+        <button id="new-game-btn" class="btn-sm">+ New game</button>
+        <button id="sign-out-btn" class="btn-sm secondary" type="button">Sign out</button>
+      </div>
+    </header>
+    <main class="app-main">
+      <div id="app-error" class="error"></div>
+      <div id="games-empty" class="empty" hidden>No games yet — create your first one.</div>
+
+      <h2 class="section-title">Upcoming</h2>
+      <div id="upcoming-list" class="games-list"></div>
+
+      <div id="past-section" hidden>
+        <h2 class="section-title muted">Past</h2>
+        <div id="past-list" class="games-list"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== new/edit game modal ===== -->
+  <div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal">
+      <h2 id="modal-title">New game</h2>
+      <div id="modal-error" class="error"></div>
+
+      <div class="grid-2">
+        <div>
+          <label for="f-date">Date</label>
+          <input id="f-date" type="date" />
+        </div>
+        <div>
+          <label for="f-time">Start time</label>
+          <input id="f-time" type="time" />
+        </div>
+      </div>
+      <label for="f-duration">Duration (minutes)</label>
+      <input id="f-duration" type="number" min="30" step="15" value="90" />
+      <label for="f-location">Location</label>
+      <input id="f-location" type="text" placeholder="e.g. Cove Sports Club" />
+      <label for="f-court">Court</label>
+      <input id="f-court" type="text" placeholder="e.g. Court 2" />
+      <label for="f-format">Format (optional)</label>
+      <input id="f-format" type="text" placeholder="e.g. Men's Americano" />
+      <label for="f-notes">Notes (optional)</label>
+      <input id="f-notes" type="text" placeholder="e.g. payment pending" />
+
+      <button id="save-game-btn">Save game</button>
+      <button id="cancel-game-btn" class="secondary" type="button">Cancel</button>
+      <button id="delete-game-btn" class="secondary danger" type="button" hidden>Delete game</button>
+    </div>
+  </div>
+
+  <div id="recaptcha-container"></div>
 
   <script type="module">
     import {
       sendCode, verifyCode, getMyProfile, createMyProfile, watchAuthState, signOutUser,
     } from './auth.js';
+    import {
+      createEvent, updateEvent, deleteEvent, watchMyEvents, splitUpcoming, toTimestamp,
+    } from './events.js';
 
-    const steps = {
-      phone: document.getElementById('step-phone'),
-      code: document.getElementById('step-code'),
-      name: document.getElementById('step-name'),
-      signedIn: document.getElementById('step-signed-in'),
-    };
-    const errorEl = document.getElementById('error');
-    let currentUser = null;
-
-    function showStep(key) {
-      Object.values(steps).forEach((el) => el.classList.remove('active'));
-      steps[key].classList.add('active');
-    }
-
-    function showError(message) {
-      errorEl.textContent = message;
-      errorEl.classList.add('show');
-    }
-
-    function clearError() {
-      errorEl.textContent = '';
-      errorEl.classList.remove('show');
-    }
+    const $ = (id) => document.getElementById(id);
 
     function setBusy(button, busy, busyLabel) {
       button.disabled = busy;
@@ -168,10 +309,10 @@
       }
     }
 
-    function showSignedIn(name, phone) {
-      document.getElementById('signed-in-name').textContent = name;
-      document.getElementById('signed-in-phone').textContent = phone;
-      showStep('signedIn');
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str == null ? '' : String(str);
+      return div.innerHTML;
     }
 
     function friendlyError(err) {
@@ -180,21 +321,68 @@
       if (code === 'auth/too-many-requests') return 'Too many attempts. Wait a bit and try again.';
       if (code === 'auth/code-expired') return 'That code expired — request a new one.';
       if (code === 'auth/invalid-verification-code') return "That code doesn't match. Check it and try again.";
+      if (code === 'permission-denied') return "That wasn't allowed — this game may not be yours to change.";
+      if (code === 'unavailable') return 'Connection trouble — check your internet and try again.';
+      // 'failed-precondition' (missing Firestore index) is deliberately left
+      // to fall through to err.message below — Firestore's own message
+      // includes a direct link to create the index, which is more useful
+      // than anything we'd write here.
       return (err && err.message) ? err.message : 'Something went wrong. Try again.';
     }
 
-    document.getElementById('send-code-btn').addEventListener('click', async () => {
+    // ---------------- view switching ----------------
+    const views = { auth: $('view-auth'), app: $('view-app') };
+    function showView(key) {
+      Object.values(views).forEach((el) => el.classList.remove('active'));
+      views[key].classList.add('active');
+    }
+
+    const steps = { phone: $('step-phone'), code: $('step-code'), name: $('step-name') };
+    function showStep(key) {
+      Object.values(steps).forEach((el) => el.classList.remove('active'));
+      steps[key].classList.add('active');
+    }
+
+    const errorEl = $('error');
+    function showError(message) { errorEl.textContent = message; errorEl.classList.add('show'); }
+    function clearError() { errorEl.textContent = ''; errorEl.classList.remove('show'); }
+
+    const appErrorEl = $('app-error');
+    function showAppError(message) { appErrorEl.textContent = message; appErrorEl.classList.add('show'); }
+    function clearAppError() { appErrorEl.textContent = ''; appErrorEl.classList.remove('show'); }
+
+    const modalErrorEl = $('modal-error');
+    function showModalError(message) { modalErrorEl.textContent = message; modalErrorEl.classList.add('show'); }
+    function clearModalError() { modalErrorEl.textContent = ''; modalErrorEl.classList.remove('show'); }
+
+    // ---------------- auth flow ----------------
+    let currentUser = null;
+    let currentProfile = null;
+    let unsubscribeEvents = null;
+
+    function enterApp(profile) {
+      currentProfile = profile;
+      $('app-user').textContent = `${profile.name} · ${profile.phone}`;
+      showView('app');
+      clearAppError();
+      if (unsubscribeEvents) unsubscribeEvents();
+      unsubscribeEvents = watchMyEvents(currentUser.uid, renderGames, (err) => {
+        showAppError(friendlyError(err));
+      });
+    }
+
+    $('send-code-btn').addEventListener('click', async () => {
       clearError();
-      const phone = document.getElementById('phone').value.trim();
+      const phone = $('phone').value.trim();
       if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
         showError('Enter a full number with country code, like +919876543210.');
         return;
       }
-      const btn = document.getElementById('send-code-btn');
+      const btn = $('send-code-btn');
       setBusy(btn, true, 'Sending…');
       try {
         await sendCode(phone, 'recaptcha-container');
-        document.getElementById('code-sub').textContent = `We sent a 6-digit code to ${phone}.`;
+        $('code-sub').textContent = `We sent a 6-digit code to ${phone}.`;
         showStep('code');
       } catch (err) {
         showError(friendlyError(err));
@@ -203,21 +391,21 @@
       }
     });
 
-    document.getElementById('verify-code-btn').addEventListener('click', async () => {
+    $('verify-code-btn').addEventListener('click', async () => {
       clearError();
-      const code = document.getElementById('code').value.trim();
+      const code = $('code').value.trim();
       if (!/^\d{6}$/.test(code)) {
         showError('Enter the 6-digit code from the text message.');
         return;
       }
-      const btn = document.getElementById('verify-code-btn');
+      const btn = $('verify-code-btn');
       setBusy(btn, true, 'Verifying…');
       try {
         const user = await verifyCode(code);
         currentUser = user;
         const profile = await getMyProfile(user.uid);
         if (profile) {
-          showSignedIn(profile.name, profile.phone);
+          enterApp(profile);
         } else {
           showStep('name');
         }
@@ -228,23 +416,23 @@
       }
     });
 
-    document.getElementById('change-number-btn').addEventListener('click', () => {
+    $('change-number-btn').addEventListener('click', () => {
       clearError();
       showStep('phone');
     });
 
-    document.getElementById('save-name-btn').addEventListener('click', async () => {
+    $('save-name-btn').addEventListener('click', async () => {
       clearError();
-      const name = document.getElementById('name').value.trim();
+      const name = $('name').value.trim();
       if (!name) {
         showError('Enter a name so your group knows who this is.');
         return;
       }
-      const btn = document.getElementById('save-name-btn');
+      const btn = $('save-name-btn');
       setBusy(btn, true, 'Saving…');
       try {
         await createMyProfile(currentUser.uid, currentUser.phoneNumber, name);
-        showSignedIn(name, currentUser.phoneNumber);
+        enterApp({ name, phone: currentUser.phoneNumber });
       } catch (err) {
         showError(friendlyError(err));
       } finally {
@@ -252,24 +440,187 @@
       }
     });
 
-    document.getElementById('sign-out-btn').addEventListener('click', async () => {
+    $('sign-out-btn').addEventListener('click', async () => {
       await signOutUser();
-      // Simplest reliable way to get a clean reCAPTCHA state for the
-      // next sign-in attempt, rather than resetting it by hand.
       window.location.reload();
     });
 
-    // Page refresh with an existing session skips straight past step 1 —
-    // Firebase persists the session in IndexedDB by default.
     watchAuthState(async (user) => {
       if (user && !currentUser) {
         currentUser = user;
         const profile = await getMyProfile(user.uid);
         if (profile) {
-          showSignedIn(profile.name, profile.phone);
+          enterApp(profile);
         } else {
+          showView('auth');
           showStep('name');
         }
+      }
+    });
+
+    // ---------------- games list ----------------
+    function dateInputValue(d) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    function timeInputValue(d) {
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mi}`;
+    }
+    function toDate(ts) {
+      return ts && ts.toDate ? ts.toDate() : new Date(ts);
+    }
+    function formatWhen(ev) {
+      const start = toDate(ev.dateTime);
+      const end = new Date(start.getTime() + (ev.durationMin || 0) * 60000);
+      const dayStr = start.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+      const startStr = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      const endStr = end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      return `${dayStr} · ${startStr} – ${endStr}`;
+    }
+
+    function gameCardHtml(ev, isPast) {
+      const mine = currentUser && ev.createdBy === currentUser.uid;
+      const names = Object.values(ev.participantNames || {});
+      const count = ev.participants ? ev.participants.length : names.length;
+      const full = count >= 4;
+      return `
+        <div class="game-card${isPast ? ' past' : ''}" data-id="${ev.id}">
+          <div class="game-when">${escapeHtml(formatWhen(ev))}</div>
+          <div class="game-where">${escapeHtml(ev.location || '')}${ev.court ? ' · ' + escapeHtml(ev.court) : ''}</div>
+          <div class="game-meta">
+            ${ev.format ? `<span class="tag">${escapeHtml(ev.format)}</span>` : ''}
+            <span class="tag${full ? '' : ' warn'}">${count}/4 ${full ? 'full' : 'joined'}</span>
+          </div>
+          <div class="game-players">Playing: ${escapeHtml(names.join(', ') || '—')}</div>
+          ${ev.notes ? `<div class="game-notes">${escapeHtml(ev.notes)}</div>` : ''}
+          ${mine && !isPast ? `
+            <div class="game-actions">
+              <button type="button" class="edit-btn" data-id="${ev.id}">Edit</button>
+              <button type="button" class="delete-btn" data-id="${ev.id}">Delete</button>
+            </div>` : ''}
+        </div>
+      `;
+    }
+
+    function attachCardHandlers(events) {
+      document.querySelectorAll('.edit-btn').forEach((btn) => {
+        btn.onclick = () => {
+          const ev = events.find((e) => e.id === btn.dataset.id);
+          if (ev) openModal(ev);
+        };
+      });
+      document.querySelectorAll('.delete-btn').forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirm('Delete this game? This cannot be undone.')) return;
+          try {
+            await deleteEvent(btn.dataset.id);
+          } catch (err) {
+            showAppError(friendlyError(err));
+          }
+        };
+      });
+    }
+
+    function renderGames(events) {
+      clearAppError();
+      const { upcoming, past } = splitUpcoming(events);
+      $('games-empty').hidden = events.length > 0;
+      $('upcoming-list').innerHTML = upcoming.length
+        ? upcoming.map((e) => gameCardHtml(e, false)).join('')
+        : (events.length ? '<div class="empty">Nothing upcoming.</div>' : '');
+      $('past-section').hidden = past.length === 0;
+      $('past-list').innerHTML = past.map((e) => gameCardHtml(e, true)).join('');
+      attachCardHandlers(events);
+    }
+
+    // ---------------- new/edit game modal ----------------
+    let editingEventId = null;
+
+    function openModal(existingEvent) {
+      clearModalError();
+      editingEventId = existingEvent ? existingEvent.id : null;
+      $('modal-title').textContent = existingEvent ? 'Edit game' : 'New game';
+      $('delete-game-btn').hidden = !existingEvent;
+      if (existingEvent) {
+        const start = toDate(existingEvent.dateTime);
+        $('f-date').value = dateInputValue(start);
+        $('f-time').value = timeInputValue(start);
+        $('f-duration').value = existingEvent.durationMin || 90;
+        $('f-location').value = existingEvent.location || '';
+        $('f-court').value = existingEvent.court || '';
+        $('f-format').value = existingEvent.format || '';
+        $('f-notes').value = existingEvent.notes || '';
+      } else {
+        $('f-date').value = '';
+        $('f-time').value = '';
+        $('f-duration').value = 90;
+        $('f-location').value = '';
+        $('f-court').value = '';
+        $('f-format').value = '';
+        $('f-notes').value = '';
+      }
+      $('modal-backdrop').classList.add('active');
+    }
+
+    function closeModal() {
+      $('modal-backdrop').classList.remove('active');
+      editingEventId = null;
+    }
+
+    $('new-game-btn').addEventListener('click', () => openModal(null));
+    $('cancel-game-btn').addEventListener('click', closeModal);
+
+    $('save-game-btn').addEventListener('click', async () => {
+      clearModalError();
+      const date = $('f-date').value;
+      const time = $('f-time').value;
+      const duration = parseInt($('f-duration').value, 10);
+      const location = $('f-location').value.trim();
+      const court = $('f-court').value.trim();
+      const format = $('f-format').value.trim();
+      const notes = $('f-notes').value.trim();
+
+      if (!date || !time) return showModalError('Pick a date and time.');
+      if (!duration || duration <= 0) return showModalError('Duration needs to be a positive number.');
+      if (!location) return showModalError('Add a location.');
+      if (!court) return showModalError('Add a court.');
+
+      const btn = $('save-game-btn');
+      setBusy(btn, true, 'Saving…');
+      try {
+        const dateTime = toTimestamp(date, time);
+        if (editingEventId) {
+          await updateEvent(editingEventId, { dateTime, durationMin: duration, location, court, format, notes });
+        } else {
+          await createEvent(
+            { dateTime, durationMin: duration, location, court, format, notes },
+            currentUser.uid,
+            currentProfile.name,
+          );
+        }
+        closeModal();
+      } catch (err) {
+        showModalError(friendlyError(err));
+      } finally {
+        setBusy(btn, false);
+      }
+    });
+
+    $('delete-game-btn').addEventListener('click', async () => {
+      if (!editingEventId || !confirm('Delete this game? This cannot be undone.')) return;
+      const btn = $('delete-game-btn');
+      setBusy(btn, true, 'Deleting…');
+      try {
+        await deleteEvent(editingEventId);
+        closeModal();
+      } catch (err) {
+        showModalError(friendlyError(err));
+      } finally {
+        setBusy(btn, false);
       }
     });
   </script>
