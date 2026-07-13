@@ -6,7 +6,6 @@ import {
   collection,
   query,
   where,
-  getDocs,
   onSnapshot,
   serverTimestamp,
   runTransaction,
@@ -14,15 +13,17 @@ import {
 
 const INVITES = 'invites';
 
-// One-time fetch of invites the current user has sent (any status) —
-// used to build a "invited before" quick-pick list. Deliberately no
-// orderBy here to avoid needing another composite index: this dataset
-// is small (one person's own invite history), so sorting/deduping by
-// most-recent happens client-side instead.
-export async function getSentInvites(myUid) {
+// Live view of every invite the current user has sent, any status —
+// powers both the "invited before" quick-pick list and, per game,
+// showing who's still pending or who declined. One listener covers
+// both, so they can never drift out of sync with each other.
+export function watchSentInvites(myUid, onChange, onError) {
   const q = query(collection(db, INVITES), where('invitedBy', '==', myUid));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data());
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    onError,
+  );
 }
 
 // Deterministic id: "{eventId}_{invitedPhone}" — see DATA_MODEL.md. This
