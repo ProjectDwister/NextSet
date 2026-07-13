@@ -3,6 +3,7 @@ import {
   collection,
   addDoc,
   doc,
+  getDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -14,6 +15,15 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js';
 
 const EVENTS = 'events';
+
+// One-time fetch of a single event by id — used to preview a game
+// someone's been invited to but hasn't joined (and so isn't covered by
+// watchMyEvents' participants filter yet). Allowed by the rules' "has
+// any invite" clause, not just for confirmed participants.
+export async function getEvent(eventId) {
+  const snap = await getDoc(doc(db, EVENTS, eventId));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
 
 export function toTimestamp(dateStr, timeStr) {
   return Timestamp.fromDate(new Date(`${dateStr}T${timeStr}`));

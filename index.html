@@ -139,6 +139,7 @@
     padding: 16px 18px;
   }
   .game-card.past { opacity: 0.55; }
+  .game-card.invite-pending { border-color: rgba(120, 224, 143, 0.35); }
   .game-when { font-weight: 600; font-size: 0.98rem; }
   .game-where { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
   .game-meta { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
@@ -154,7 +155,7 @@
   .tag.warn { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
   .game-players { color: var(--text); font-size: 0.85rem; margin-top: 10px; }
   .game-notes { color: var(--muted); font-size: 0.82rem; margin-top: 6px; font-style: italic; }
-  .game-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .game-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .game-actions button {
     width: auto;
     padding: 7px 12px;
@@ -165,8 +166,14 @@
     border-radius: 8px;
     margin: 0;
   }
+  .game-actions button.accept {
+    background: var(--accent);
+    color: #06210f;
+    border-color: transparent;
+    font-weight: 600;
+  }
 
-  /* --- new/edit game modal --- */
+  /* --- modals (new/edit game, invite) --- */
   .modal-backdrop {
     display: none;
     position: fixed;
@@ -242,6 +249,12 @@
     </header>
     <main class="app-main">
       <div id="app-error" class="error"></div>
+
+      <div id="invites-section" hidden>
+        <h2 class="section-title">Invitations</h2>
+        <div id="invites-list" class="games-list"></div>
+      </div>
+
       <div id="games-empty" class="empty" hidden>No games yet — create your first one.</div>
 
       <h2 class="section-title">Upcoming</h2>
@@ -287,6 +300,21 @@
     </div>
   </div>
 
+  <!-- ===== invite modal ===== -->
+  <div class="modal-backdrop" id="invite-modal-backdrop">
+    <div class="modal">
+      <h2>Invite someone</h2>
+      <p class="sub">They'll see this game as soon as they sign in with this number and accept — nothing else on your calendar becomes visible to them.</p>
+      <div id="invite-modal-error" class="error"></div>
+      <label for="inv-phone">Phone number</label>
+      <input id="inv-phone" type="tel" value="+91" inputmode="tel" autocomplete="tel" />
+      <label for="inv-name">Name (optional)</label>
+      <input id="inv-name" type="text" placeholder="So you remember who this is" />
+      <button id="send-invite-btn">Send invite</button>
+      <button id="cancel-invite-btn" class="secondary" type="button">Cancel</button>
+    </div>
+  </div>
+
   <div id="recaptcha-container"></div>
 
   <script type="module">
@@ -294,8 +322,11 @@
       sendCode, verifyCode, getMyProfile, createMyProfile, watchAuthState, signOutUser,
     } from './auth.js';
     import {
-      createEvent, updateEvent, deleteEvent, watchMyEvents, splitUpcoming, toTimestamp,
+      createEvent, updateEvent, deleteEvent, watchMyEvents, splitUpcoming, toTimestamp, getEvent,
     } from './events.js';
+    import {
+      sendInvite, watchMyInvites, acceptInvite, declineInvite,
+    } from './invites.js';
 
     const $ = (id) => document.getElementById(id);
 
@@ -330,6 +361,10 @@
       return (err && err.message) ? err.message : 'Something went wrong. Try again.';
     }
 
+    function isValidPhone(p) {
+      return /^\+[1-9]\d{7,14}$/.test(p);
+    }
+
     // ---------------- view switching ----------------
     const views = { auth: $('view-auth'), app: $('view-app') };
     function showView(key) {
@@ -355,10 +390,15 @@
     function showModalError(message) { modalErrorEl.textContent = message; modalErrorEl.classList.add('show'); }
     function clearModalError() { modalErrorEl.textContent = ''; modalErrorEl.classList.remove('show'); }
 
+    const inviteModalErrorEl = $('invite-modal-error');
+    function showInviteModalError(message) { inviteModalErrorEl.textContent = message; inviteModalErrorEl.classList.add('show'); }
+    function clearInviteModalError() { inviteModalErrorEl.textContent = ''; inviteModalErrorEl.classList.remove('show'); }
+
     // ---------------- auth flow ----------------
     let currentUser = null;
     let currentProfile = null;
     let unsubscribeEvents = null;
+    let unsubscribeInvites = null;
 
     function enterApp(profile) {
       currentProfile = profile;
@@ -366,7 +406,11 @@
       showView('app');
       clearAppError();
       if (unsubscribeEvents) unsubscribeEvents();
+      if (unsubscribeInvites) unsubscribeInvites();
       unsubscribeEvents = watchMyEvents(currentUser.uid, renderGames, (err) => {
+        showAppError(friendlyError(err));
+      });
+      unsubscribeInvites = watchMyInvites(currentUser.phoneNumber, renderInvites, (err) => {
         showAppError(friendlyError(err));
       });
     }
@@ -374,7 +418,7 @@
     $('send-code-btn').addEventListener('click', async () => {
       clearError();
       const phone = $('phone').value.trim();
-      if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+      if (!isValidPhone(phone)) {
         showError('Enter a full number with country code, like +919876543210.');
         return;
       }
@@ -458,7 +502,7 @@
       }
     });
 
-    // ---------------- games list ----------------
+    // ---------------- formatting helpers ----------------
     function dateInputValue(d) {
       const yyyy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -482,11 +526,20 @@
       return `${dayStr} · ${startStr} – ${endStr}`;
     }
 
+    // ---------------- games list ----------------
     function gameCardHtml(ev, isPast) {
       const mine = currentUser && ev.createdBy === currentUser.uid;
       const names = Object.values(ev.participantNames || {});
       const count = ev.participants ? ev.participants.length : names.length;
       const full = count >= 4;
+
+      const actions = [];
+      if (!isPast) actions.push(`<button type="button" class="invite-btn" data-id="${ev.id}">Invite</button>`);
+      if (mine && !isPast) {
+        actions.push(`<button type="button" class="edit-btn" data-id="${ev.id}">Edit</button>`);
+        actions.push(`<button type="button" class="delete-btn" data-id="${ev.id}">Delete</button>`);
+      }
+
       return `
         <div class="game-card${isPast ? ' past' : ''}" data-id="${ev.id}">
           <div class="game-when">${escapeHtml(formatWhen(ev))}</div>
@@ -497,16 +550,15 @@
           </div>
           <div class="game-players">Playing: ${escapeHtml(names.join(', ') || '—')}</div>
           ${ev.notes ? `<div class="game-notes">${escapeHtml(ev.notes)}</div>` : ''}
-          ${mine && !isPast ? `
-            <div class="game-actions">
-              <button type="button" class="edit-btn" data-id="${ev.id}">Edit</button>
-              <button type="button" class="delete-btn" data-id="${ev.id}">Delete</button>
-            </div>` : ''}
+          ${actions.length ? `<div class="game-actions">${actions.join('')}</div>` : ''}
         </div>
       `;
     }
 
     function attachCardHandlers(events) {
+      document.querySelectorAll('.invite-btn').forEach((btn) => {
+        btn.onclick = () => openInviteModal(btn.dataset.id);
+      });
       document.querySelectorAll('.edit-btn').forEach((btn) => {
         btn.onclick = () => {
           const ev = events.find((e) => e.id === btn.dataset.id);
@@ -536,6 +588,123 @@
       $('past-list').innerHTML = past.map((e) => gameCardHtml(e, true)).join('');
       attachCardHandlers(events);
     }
+
+    // ---------------- invitations (received) ----------------
+    async function renderInvites(invites) {
+      const section = $('invites-section');
+      section.hidden = invites.length === 0;
+      if (invites.length === 0) {
+        $('invites-list').innerHTML = '';
+        return;
+      }
+      const withEvents = await Promise.all(invites.map(async (inv) => {
+        try {
+          return { inv, ev: await getEvent(inv.eventId) };
+        } catch {
+          return { inv, ev: null };
+        }
+      }));
+      $('invites-list').innerHTML = withEvents.map(({ inv, ev }) => inviteCardHtml(inv, ev)).join('');
+      attachInviteHandlers(invites);
+    }
+
+    function inviteCardHtml(inv, ev) {
+      if (!ev) {
+        return `
+          <div class="game-card invite-pending" data-invite-id="${inv.id}">
+            <div class="game-when">This game no longer exists</div>
+            <div class="game-actions">
+              <button type="button" class="decline-invite-btn" data-id="${inv.id}">Dismiss</button>
+            </div>
+          </div>
+        `;
+      }
+      const inviterName = (ev.participantNames && ev.participantNames[inv.invitedBy]) || 'Someone';
+      return `
+        <div class="game-card invite-pending" data-invite-id="${inv.id}">
+          <div class="game-when">${escapeHtml(formatWhen(ev))}</div>
+          <div class="game-where">${escapeHtml(ev.location || '')}${ev.court ? ' · ' + escapeHtml(ev.court) : ''}</div>
+          <div class="game-meta">
+            ${ev.format ? `<span class="tag">${escapeHtml(ev.format)}</span>` : ''}
+          </div>
+          <div class="game-players">${escapeHtml(inviterName)} invited you</div>
+          <div class="game-actions">
+            <button type="button" class="accept" data-action="accept" data-id="${inv.id}">Accept</button>
+            <button type="button" data-action="decline" data-id="${inv.id}">Decline</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function attachInviteHandlers(invites) {
+      document.querySelectorAll('[data-action="accept"]').forEach((btn) => {
+        btn.onclick = async () => {
+          const inv = invites.find((i) => i.id === btn.dataset.id);
+          if (!inv) return;
+          btn.disabled = true;
+          try {
+            await acceptInvite(inv, currentUser.uid, currentProfile.name);
+          } catch (err) {
+            showAppError(friendlyError(err));
+            btn.disabled = false;
+          }
+        };
+      });
+      document.querySelectorAll('[data-action="decline"]').forEach((btn) => {
+        btn.onclick = async () => {
+          try {
+            await declineInvite(btn.dataset.id);
+          } catch (err) {
+            showAppError(friendlyError(err));
+          }
+        };
+      });
+    }
+
+    // ---------------- invite modal (sending) ----------------
+    let invitingEventId = null;
+
+    function openInviteModal(eventId) {
+      invitingEventId = eventId;
+      clearInviteModalError();
+      $('inv-phone').value = '+91';
+      $('inv-name').value = '';
+      $('invite-modal-backdrop').classList.add('active');
+    }
+    function closeInviteModal() {
+      $('invite-modal-backdrop').classList.remove('active');
+      invitingEventId = null;
+    }
+
+    $('cancel-invite-btn').addEventListener('click', closeInviteModal);
+
+    $('send-invite-btn').addEventListener('click', async () => {
+      clearInviteModalError();
+      const phone = $('inv-phone').value.trim();
+      const name = $('inv-name').value.trim();
+      if (!isValidPhone(phone)) {
+        showInviteModalError('Enter a full number with country code, like +919876543210.');
+        return;
+      }
+      if (phone === currentUser.phoneNumber) {
+        showInviteModalError("That's your own number.");
+        return;
+      }
+      const btn = $('send-invite-btn');
+      setBusy(btn, true, 'Sending…');
+      try {
+        await sendInvite(invitingEventId, phone, name, currentUser.uid);
+        closeInviteModal();
+      } catch (err) {
+        if (err && err.code === 'permission-denied') {
+          showInviteModalError('Could not send — this number may already have a pending invite to this game.');
+        } else {
+          showInviteModalError(friendlyError(err));
+        }
+      } finally {
+        setBusy(btn, false);
+      }
+    });
 
     // ---------------- new/edit game modal ----------------
     let editingEventId = null;
