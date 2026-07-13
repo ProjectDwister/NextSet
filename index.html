@@ -4,6 +4,13 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>NextSet</title>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="icon" href="./icons/icon-192.png"/>
+<link rel="apple-touch-icon" href="./icons/icon-192.png"/>
+<meta name="theme-color" content="#0b1020"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="NextSet"/>
 <style>
   :root {
     --bg: #0b1020;
@@ -73,6 +80,20 @@
     display: none;
   }
   .error.show { display: block; }
+
+  .install-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .install-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .install-banner .btn-sm { margin: 0; }
 
   /* top-level view switch: sign-in vs the app itself */
   .view { display: none; }
@@ -214,6 +235,14 @@
 </style>
 </head>
 <body>
+
+  <div id="install-banner" class="install-banner" hidden>
+    <span id="install-banner-text"></span>
+    <div class="install-banner-actions">
+      <button id="install-banner-btn" class="btn-sm" hidden type="button">Install</button>
+      <button id="install-banner-dismiss" class="btn-sm secondary" type="button">Dismiss</button>
+    </div>
+  </div>
 
   <!-- ===== sign-in ===== -->
   <div class="view active" id="view-auth">
@@ -846,6 +875,74 @@
         setBusy(btn, false);
       }
     });
+
+    // ---------------- installability ----------------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {
+          // Non-fatal — the app works the same without it, just without
+          // offline caching and the install prompt.
+        });
+      });
+    }
+
+    (function setupInstallBanner() {
+      const DISMISS_KEY = 'nextset-install-dismissed';
+      const banner = $('install-banner');
+      const textEl = $('install-banner-text');
+      const installBtn = $('install-banner-btn');
+      const dismissBtn = $('install-banner-dismiss');
+
+      function isStandalone() {
+        return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      }
+      function isIOS() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      }
+
+      let dismissed = false;
+      try { dismissed = !!localStorage.getItem(DISMISS_KEY); } catch { dismissed = false; }
+      if (isStandalone() || dismissed) return;
+
+      let deferredPrompt = null;
+
+      function show(text, showInstallButton) {
+        textEl.textContent = text;
+        installBtn.hidden = !showInstallButton;
+        banner.hidden = false;
+      }
+
+      // Chrome/Edge/Android: capture the native prompt instead of letting
+      // the browser show its own, so we control when and how it appears.
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        show('Install NextSet for one-tap access from your home screen.', true);
+      });
+
+      // iOS has no install API at all — Add to Home Screen is always a
+      // manual step through the Share sheet, so this is instructions,
+      // not a button.
+      if (isIOS() && !isStandalone()) {
+        show('Add NextSet to your Home Screen: tap Share, then "Add to Home Screen."', false);
+      }
+
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        banner.hidden = true;
+      });
+
+      dismissBtn.addEventListener('click', () => {
+        banner.hidden = true;
+        try { localStorage.setItem(DISMISS_KEY, '1'); } catch {
+          // Private browsing or storage disabled — banner just won't
+          // remember the dismissal across reloads, which is fine.
+        }
+      });
+    })();
   </script>
 </body>
 </html>
