@@ -82,7 +82,7 @@
   .error.show { display: block; }
 
   .install-banner {
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
@@ -92,6 +92,7 @@
     font-size: 0.85rem;
     color: var(--text);
   }
+  .install-banner.show { display: flex; }
   .install-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .install-banner .btn-sm { margin: 0; }
 
@@ -250,7 +251,7 @@
 </head>
 <body>
 
-  <div id="install-banner" class="install-banner" hidden>
+  <div id="install-banner" class="install-banner">
     <span id="install-banner-text"></span>
     <div class="install-banner-actions">
       <button id="install-banner-btn" class="btn-sm" hidden type="button">Install</button>
@@ -987,6 +988,19 @@
           // offline caching and the install prompt.
         });
       });
+
+      // sw.js already does skipWaiting() + clients.claim() so a new
+      // version takes over immediately instead of waiting for every
+      // open tab to close on its own — but taking over control doesn't
+      // retroactively refresh a page that's already loaded with old
+      // code. This does that last step: reload once, automatically,
+      // the moment a new service worker actually takes control.
+      let refreshedOnce = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshedOnce) return;
+        refreshedOnce = true;
+        window.location.reload();
+      });
     }
 
     (function setupInstallBanner() {
@@ -1012,7 +1026,7 @@
       function show(text, showInstallButton) {
         textEl.textContent = text;
         installBtn.hidden = !showInstallButton;
-        banner.hidden = false;
+        banner.classList.add('show');
       }
 
       // Chrome/Edge/Android: capture the native prompt instead of letting
@@ -1035,11 +1049,11 @@
         deferredPrompt.prompt();
         await deferredPrompt.userChoice;
         deferredPrompt = null;
-        banner.hidden = true;
+        banner.classList.remove('show');
       });
 
       dismissBtn.addEventListener('click', () => {
-        banner.hidden = true;
+        banner.classList.remove('show');
         try { localStorage.setItem(DISMISS_KEY, '1'); } catch {
           // Private browsing or storage disabled — banner just won't
           // remember the dismissal across reloads, which is fine.
