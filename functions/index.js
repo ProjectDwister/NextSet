@@ -1,4 +1,5 @@
 const { onSchedule } = require('firebase-functions/scheduler');
+const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { logger } = require('firebase-functions');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
@@ -23,6 +24,32 @@ function formatWhen(dateTime) {
     minute: '2-digit',
     timeZone: 'Asia/Kolkata',
   });
+}
+
+// Shared by both functions below: sends one payload to every device a
+// given uid has subscribed from, cleaning up any subscription the push
+// service reports as dead (404/410 — unsubscribed, site data cleared,
+// etc.) so future sends stop wasting time on it.
+async function pushToUser(uid, payload) {
+  let subsSnap;
+  try {
+    subsSnap = await db.collection('users').doc(uid).collection('pushSubscriptions').get();
+  } catch (err) {
+    logger.error('could not read subscriptions', { uid, error: err.message });
+    return;
+  }
+
+  for (const subDoc of subsSnap.docs) {
+    const sub = subDoc.data();
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
+    } catch (err) {
+      logger.warn('push send failed', { uid, subId: subDoc.id, status: err.statusCode, message: err.message });
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        await subDoc.ref.delete().catch(() => {});
+      }
+    }
+  }
 }
 
 // Checks a sliding window ending exactly `hoursAhead` from now. The
@@ -57,28 +84,7 @@ async function sendRemindersForWindow(hoursAhead, sentField) {
     const payload = JSON.stringify({ title, body, url: './' });
 
     for (const uid of participants) {
-      let subsSnap;
-      try {
-        subsSnap = await db.collection('users').doc(uid).collection('pushSubscriptions').get();
-      } catch (err) {
-        logger.error('could not read subscriptions', { uid, error: err.message });
-        continue;
-      }
-
-      for (const subDoc of subsSnap.docs) {
-        const sub = subDoc.data();
-        try {
-          await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
-        } catch (err) {
-          logger.warn('push send failed', { uid, subId: subDoc.id, status: err.statusCode, message: err.message });
-          // 404/410 means the subscription is dead — the browser
-          // unsubscribed, the user cleared site data, etc. Clean it up
-          // so we stop wasting sends on it.
-          if (err.statusCode === 404 || err.statusCode === 410) {
-            await subDoc.ref.delete().catch(() => {});
-          }
-        }
-      }
+      await pushToUser(uid, payload);
     }
 
     await eventDoc.ref.update({ [sentField]: admin.firestore.FieldValue.serverTimestamp() }).catch((err) => {
@@ -97,5 +103,35 @@ exports.sendGameReminders = onSchedule(
     webpush.setVapidDetails('mailto:reminders@nextset.app', VAPID_PUBLIC_KEY, vapidPrivateKey.value());
     await sendRemindersForWindow(24, 'reminder24hSentAt');
     await sendRemindersForWindow(12, 'reminder12hSentAt');
+  },
+);
+
+// Fires the moment a new invite document is created. Only ever sends
+// anything if the invited phone number already belongs to a registered
+// user who has enabled reminders — someone who hasn't signed up yet has
+// no uid and nothing to push to, and still finds the invite the normal
+// way (the Invitations section, or a WhatsApp nudge) once they do.
+exports.notifyOnInvite = onDocumentCreated(
+  { document: 'invites/{inviteId}', secrets: [vapidPrivateKey] },
+  async (snapshotEvent) => {
+    const invite = snapshotEvent.data ? snapshotEvent.data.data() : null;
+    if (!invite || !invite.invitedPhone || !invite.eventId) return;
+
+    const userSnap = await db.collection('users').where('phone', '==', invite.invitedPhone).limit(1).get();
+    if (userSnap.empty) return; // not registered yet — nothing to push to
+
+    const inviteeUid = userSnap.docs[0].id;
+
+    const eventSnap = await db.collection('events').doc(invite.eventId).get();
+    if (!eventSnap.exists) return;
+    const gameEvent = eventSnap.data();
+
+    const inviterName = (gameEvent.participantNames && gameEvent.participantNames[invite.invitedBy]) || 'Someone';
+    const where = [gameEvent.location, gameEvent.court].filter(Boolean).join(' · ');
+    const body = `${inviterName} invited you — ${formatWhen(gameEvent.dateTime)}${where ? ' · ' + where : ''}`;
+    const payload = JSON.stringify({ title: 'New game invite', body, url: './' });
+
+    webpush.setVapidDetails('mailto:reminders@nextset.app', VAPID_PUBLIC_KEY, vapidPrivateKey.value());
+    await pushToUser(inviteeUid, payload);
   },
 );
