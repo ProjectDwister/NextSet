@@ -37,4 +37,4 @@ jobs:
         run: echo "${{ secrets.VAPID_PRIVATE_KEY }}" | firebase functions:secrets:set --data-file=- VAPID_PRIVATE_KEY --project games-scheduler-aa101
 
       - name: Deploy functions
-        run: firebase deploy --only functions --project games-scheduler-aa101 --non-interactive
+        run: firebase deploy --only functions --project games-scheduler-aa101 --non-interactive --force
