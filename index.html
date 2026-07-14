@@ -110,6 +110,20 @@
   .install-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .install-banner .btn-sm { margin: 0; }
 
+  .reminder-banner {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 20px;
+    background: rgba(120, 224, 143, 0.08);
+    border-bottom: 1px solid rgba(120, 224, 143, 0.2);
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .reminder-banner.show { display: flex; }
+  .reminder-banner .btn-sm { margin: 0; }
+
   .recent-invitees-label { font-size: 0.78rem; color: var(--muted); margin: 14px 0 6px; }
   .recent-invitees-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .recent-invitees-chips button {
@@ -209,8 +223,11 @@
   }
   .game-card.past { opacity: 0.55; box-shadow: none; }
   .game-card.invite-pending { border-color: rgba(120, 224, 143, 0.35); }
-  .game-when { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; letter-spacing: -0.01em; }
-  .game-where { color: var(--muted); font-size: 0.87rem; margin-top: 4px; }
+  .game-when { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+  .game-where { color: var(--muted); font-size: 0.87rem; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+  .game-players { color: var(--text); font-size: 0.87rem; margin-top: 14px; display: flex; align-items: center; gap: 8px; }
+  .ic { flex-shrink: 0; opacity: 0.75; }
+  .game-when .ic { opacity: 0.55; }
   .game-meta { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .tag {
     display: inline-block;
@@ -225,7 +242,6 @@
   }
   .tag.gold { background: rgba(201, 168, 105, 0.14); color: var(--gold); border-color: rgba(201, 168, 105, 0.3); }
   .tag.warn { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
-  .game-players { color: var(--text); font-size: 0.87rem; margin-top: 14px; }
   .game-notes { color: var(--muted); font-size: 0.82rem; margin-top: 6px; font-style: italic; }
   .invite-status { font-size: 0.8rem; margin-top: 6px; }
   .invite-status.pending { color: var(--muted); }
@@ -374,6 +390,13 @@
         <button id="sign-out-btn" class="btn-sm secondary" type="button">Sign out</button>
       </div>
     </header>
+    <div id="reminder-banner" class="reminder-banner">
+      <span>Want a reminder 24 and 12 hours before your games?</span>
+      <div class="install-banner-actions">
+        <button id="reminder-enable-btn" class="btn-sm" type="button">Enable</button>
+        <button id="reminder-dismiss-btn" class="btn-sm secondary" type="button">Not now</button>
+      </div>
+    </div>
     <main class="app-main">
       <div id="app-error" class="error"></div>
 
@@ -467,6 +490,7 @@
     import {
       sendInvite, watchMyInvites, acceptInvite, declineInvite, watchSentInvites,
     } from './invites.js';
+    import { pushSupported, notificationPermission, enableReminders } from './push.js';
 
     const $ = (id) => document.getElementById(id);
 
@@ -583,7 +607,46 @@
       }, (err) => {
         showAppError(friendlyError(err));
       });
+      maybeShowReminderBanner();
     }
+
+    // Only offered when it can actually work, and only once — not shown
+    // again after a dismissal, and never shown if permission was
+    // already granted (or already explicitly denied at the browser
+    // level, in which case nagging again would be pointless).
+    function maybeShowReminderBanner() {
+      if (!pushSupported()) return;
+      const permission = notificationPermission();
+      if (permission === 'granted' || permission === 'denied') return;
+      try {
+        if (localStorage.getItem('nextset-reminder-dismissed')) return;
+      } catch {
+        // ignore — worst case the banner shows again next time
+      }
+      $('reminder-banner').classList.add('show');
+    }
+
+    $('reminder-enable-btn').addEventListener('click', async () => {
+      const btn = $('reminder-enable-btn');
+      setBusy(btn, true, 'Enabling…');
+      try {
+        await enableReminders(currentUser.uid);
+        $('reminder-banner').classList.remove('show');
+      } catch (err) {
+        showAppError(err && err.message ? err.message : 'Could not enable reminders.');
+      } finally {
+        setBusy(btn, false);
+      }
+    });
+
+    $('reminder-dismiss-btn').addEventListener('click', () => {
+      $('reminder-banner').classList.remove('show');
+      try {
+        localStorage.setItem('nextset-reminder-dismissed', '1');
+      } catch {
+        // fine — worst case they see the banner again next visit
+      }
+    });
 
     $('send-code-btn').addEventListener('click', async () => {
       clearError();
@@ -697,6 +760,14 @@
     }
 
     // ---------------- games list ----------------
+    // Small line-icon set, same visual language as the court-lines mark
+    // on the sign-in screen (thin stroke, currentColor, no fill) —
+    // reused across game cards and invite cards rather than repeated
+    // inline everywhere.
+    const ICON_CLOCK = '<svg class="ic" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.25"/><path d="M10 6.25v4l2.75 1.75"/></svg>';
+    const ICON_PIN = '<svg class="ic" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17.5s5.75-5.2 5.75-9.5a5.75 5.75 0 1 0-11.5 0c0 4.3 5.75 9.5 5.75 9.5z"/><circle cx="10" cy="8" r="2"/></svg>';
+    const ICON_PEOPLE = '<svg class="ic" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.25" cy="7" r="2.4"/><path d="M2.5 16.5c0-2.9 2.1-4.9 4.75-4.9s4.75 2 4.75 4.9"/><circle cx="14.75" cy="7.75" r="1.9"/><path d="M12.9 11.9c2-0.15 3.6 1.5 3.6 4.6"/></svg>';
+
     // Pending/declined invites *I* sent for a given game — respects the
     // same privacy boundary as everywhere else: only your own sent
     // invites are ever visible to you, never anyone else's.
@@ -726,13 +797,13 @@
 
       return `
         <div class="game-card${isPast ? ' past' : ''}" data-id="${ev.id}">
-          <div class="game-when">${escapeHtml(formatWhen(ev))}</div>
-          <div class="game-where">${escapeHtml(ev.location || '')}${ev.court ? ' · ' + escapeHtml(ev.court) : ''}</div>
+          <div class="game-when">${ICON_CLOCK}${escapeHtml(formatWhen(ev))}</div>
+          <div class="game-where">${ICON_PIN}${escapeHtml(ev.location || '')}${ev.court ? ' · ' + escapeHtml(ev.court) : ''}</div>
           <div class="game-meta">
             ${ev.format ? `<span class="tag gold">${escapeHtml(ev.format)}</span>` : ''}
             <span class="tag${full ? '' : ' warn'}">${count}/4 ${full ? 'full' : 'joined'}</span>
           </div>
-          <div class="game-players">Playing: ${escapeHtml(names.join(', ') || '—')}</div>
+          <div class="game-players">${ICON_PEOPLE}${escapeHtml(names.join(', ') || '—')}</div>
           ${!isPast ? inviteStatusHtml(ev.id) : ''}
           ${ev.notes ? `<div class="game-notes">${escapeHtml(ev.notes)}</div>` : ''}
           ${actions.length ? `<div class="game-actions">${actions.join('')}</div>` : ''}
@@ -810,12 +881,12 @@
       const inviterName = (ev.participantNames && ev.participantNames[inv.invitedBy]) || 'Someone';
       return `
         <div class="game-card invite-pending" data-invite-id="${inv.id}">
-          <div class="game-when">${escapeHtml(formatWhen(ev))}</div>
-          <div class="game-where">${escapeHtml(ev.location || '')}${ev.court ? ' · ' + escapeHtml(ev.court) : ''}</div>
+          <div class="game-when">${ICON_CLOCK}${escapeHtml(formatWhen(ev))}</div>
+          <div class="game-where">${ICON_PIN}${escapeHtml(ev.location || '')}${ev.court ? ' · ' + escapeHtml(ev.court) : ''}</div>
           <div class="game-meta">
             ${ev.format ? `<span class="tag gold">${escapeHtml(ev.format)}</span>` : ''}
           </div>
-          <div class="game-players">${escapeHtml(inviterName)} invited you</div>
+          <div class="game-players">${ICON_PEOPLE}${escapeHtml(inviterName)} invited you</div>
           <div class="game-actions">
             <button type="button" class="accept" data-action="accept" data-id="${inv.id}">Accept</button>
             <button type="button" data-action="decline" data-id="${inv.id}">Decline</button>

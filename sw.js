@@ -1,12 +1,13 @@
 // Bump this whenever the app-shell file list below changes; old caches
 // get cleaned up automatically on activate.
-const CACHE_NAME = 'nextset-v7';
+const CACHE_NAME = 'nextset-v8';
 
 const APP_SHELL = [
   './index.html',
   './auth.js',
   './events.js',
   './invites.js',
+  './push.js',
   './firebase-config.js',
   './manifest.json',
   './icons/icon-192.png',
@@ -63,5 +64,41 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => caches.match(event.request)),
+  );
+});
+
+// A push message only ever carries a data payload here — no images or
+// actions, kept deliberately simple. If parsing ever fails for any
+// reason, fall back to a generic notification rather than showing
+// nothing at all.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  const title = data.title || 'NextSet';
+  const options = {
+    body: data.body || 'You have an upcoming game.',
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    data: { url: data.url || './' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.registration.scope) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    }),
   );
 });
