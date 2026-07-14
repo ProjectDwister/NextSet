@@ -246,6 +246,7 @@
   .invite-status { font-size: 0.8rem; margin-top: 6px; }
   .invite-status.pending { color: var(--muted); }
   .invite-status.declined { color: var(--warn-text); }
+  .conflict-warning { font-size: 0.8rem; margin-top: 6px; color: var(--warn-text); }
   .game-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
   .game-actions button {
     width: auto;
@@ -759,6 +760,22 @@
       return `${dayStr} · ${startStr} – ${endStr}`;
     }
 
+    // First upcoming event (from a given list) whose time range overlaps
+    // [dateTime, dateTime + durationMin]. Only ever checked against your
+    // own confirmed games — a nudge to notice a mistake, not a hard
+    // block, since occasionally double-booking on purpose (two courts,
+    // unsure which is free) is a real thing people do.
+    function findOverlap(dateTime, durationMin, events, excludeEventId) {
+      const start = toDate(dateTime).getTime();
+      const end = start + (durationMin || 0) * 60000;
+      return splitUpcoming(events).upcoming.find((ev) => {
+        if (excludeEventId && ev.id === excludeEventId) return false;
+        const evStart = toDate(ev.dateTime).getTime();
+        const evEnd = evStart + (ev.durationMin || 0) * 60000;
+        return start < evEnd && evStart < end;
+      }) || null;
+    }
+
     // ---------------- games list ----------------
     // Small line-icon set, same visual language as the court-lines mark
     // on the sign-in screen (thin stroke, currentColor, no fill) —
@@ -864,7 +881,7 @@
         }
       }));
       $('invites-list').innerHTML = withEvents.map(({ inv, ev }) => inviteCardHtml(inv, ev)).join('');
-      attachInviteHandlers(invites);
+      attachInviteHandlers(withEvents);
     }
 
     function inviteCardHtml(inv, ev) {
@@ -879,6 +896,10 @@
         `;
       }
       const inviterName = (ev.participantNames && ev.participantNames[inv.invitedBy]) || 'Someone';
+      const conflict = findOverlap(ev.dateTime, ev.durationMin, latestEvents, null);
+      const conflictHtml = conflict
+        ? `<div class="conflict-warning">Overlaps with your ${escapeHtml(formatWhen(conflict))} game${conflict.location ? ' at ' + escapeHtml(conflict.location) : ''}</div>`
+        : '';
       return `
         <div class="game-card invite-pending" data-invite-id="${inv.id}">
           <div class="game-when">${ICON_CLOCK}${escapeHtml(formatWhen(ev))}</div>
@@ -887,6 +908,7 @@
             ${ev.format ? `<span class="tag gold">${escapeHtml(ev.format)}</span>` : ''}
           </div>
           <div class="game-players">${ICON_PEOPLE}${escapeHtml(inviterName)} invited you</div>
+          ${conflictHtml}
           <div class="game-actions">
             <button type="button" class="accept" data-action="accept" data-id="${inv.id}">Accept</button>
             <button type="button" data-action="decline" data-id="${inv.id}">Decline</button>
@@ -895,11 +917,22 @@
       `;
     }
 
-    function attachInviteHandlers(invites) {
+    function attachInviteHandlers(withEvents) {
       document.querySelectorAll('[data-action="accept"]').forEach((btn) => {
         btn.onclick = async () => {
-          const inv = invites.find((i) => i.id === btn.dataset.id);
-          if (!inv) return;
+          const pair = withEvents.find((w) => w.inv.id === btn.dataset.id);
+          if (!pair) return;
+          const { inv, ev } = pair;
+          if (ev) {
+            const conflict = findOverlap(ev.dateTime, ev.durationMin, latestEvents, null);
+            if (conflict) {
+              const ok = confirm(
+                `This overlaps with your ${formatWhen(conflict)} game`
+                + `${conflict.location ? ' at ' + conflict.location : ''}. Accept anyway?`,
+              );
+              if (!ok) return;
+            }
+          }
           btn.disabled = true;
           try {
             await acceptInvite(inv, currentUser.uid, currentProfile.name);
@@ -1111,10 +1144,19 @@
       if (!location) return showModalError('Add a location.');
       if (!court) return showModalError('Add a court.');
 
+      const dateTime = toTimestamp(date, time);
+      const conflict = findOverlap(dateTime, duration, latestEvents, editingEventId);
+      if (conflict) {
+        const ok = confirm(
+          `This overlaps with your ${formatWhen(conflict)} game`
+          + `${conflict.location ? ' at ' + conflict.location : ''}. Save anyway?`,
+        );
+        if (!ok) return;
+      }
+
       const btn = $('save-game-btn');
       setBusy(btn, true, 'Saving…');
       try {
-        const dateTime = toTimestamp(date, time);
         if (editingEventId) {
           await updateEvent(editingEventId, { dateTime, durationMin: duration, location, court, format, notes });
         } else {
