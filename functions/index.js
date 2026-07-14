@@ -1,5 +1,5 @@
 const { onSchedule } = require('firebase-functions/scheduler');
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { logger } = require('firebase-functions');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
@@ -133,5 +133,45 @@ exports.notifyOnInvite = onDocumentCreated(
 
     webpush.setVapidDetails('mailto:reminders@nextset.app', VAPID_PUBLIC_KEY, vapidPrivateKey.value());
     await pushToUser(inviteeUid, payload);
+  },
+);
+
+// Fires whenever an invite document is updated — in practice that only
+// ever means status moved from pending to accepted or declined, since
+// that's the only update the security rules permit. Notifies whoever
+// sent the invite, so a decline in particular doesn't sit unnoticed
+// until they next happen to open the app.
+exports.notifyOnInviteResponse = onDocumentUpdated(
+  { document: 'invites/{inviteId}', secrets: [vapidPrivateKey] },
+  async (updateEvent) => {
+    const before = updateEvent.data && updateEvent.data.before ? updateEvent.data.before.data() : null;
+    const after = updateEvent.data && updateEvent.data.after ? updateEvent.data.after.data() : null;
+    if (!before || !after) return;
+    if (before.status !== 'pending' || (after.status !== 'accepted' && after.status !== 'declined')) return;
+
+    const inviterUid = after.invitedBy;
+    if (!inviterUid) return;
+
+    const label = after.invitedName || after.invitedPhone || 'Someone';
+    const verb = after.status === 'accepted' ? 'accepted' : 'declined';
+    let body = `${label} ${verb} your invite`;
+
+    if (after.eventId) {
+      const eventSnap = await db.collection('events').doc(after.eventId).get();
+      if (eventSnap.exists) {
+        const gameEvent = eventSnap.data();
+        const where = [gameEvent.location, gameEvent.court].filter(Boolean).join(' · ');
+        body += ` — ${formatWhen(gameEvent.dateTime)}${where ? ' · ' + where : ''}`;
+      }
+    }
+
+    const payload = JSON.stringify({
+      title: after.status === 'accepted' ? 'Invite accepted' : 'Invite declined',
+      body,
+      url: './',
+    });
+
+    webpush.setVapidDetails('mailto:reminders@nextset.app', VAPID_PUBLIC_KEY, vapidPrivateKey.value());
+    await pushToUser(inviterUid, payload);
   },
 );
