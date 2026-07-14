@@ -1,0 +1,40 @@
+name: Deploy Cloud Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - '.firebaserc'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install function dependencies
+        working-directory: functions
+        run: npm install
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Sync VAPID private key to Firebase Secret Manager
+        run: echo "${{ secrets.VAPID_PRIVATE_KEY }}" | firebase functions:secrets:set --data-file=- VAPID_PRIVATE_KEY --project games-scheduler-aa101
+
+      - name: Deploy functions
+        run: firebase deploy --only functions --project games-scheduler-aa101 --non-interactive
