@@ -139,15 +139,26 @@ private, participant-only version of a Rally tournament.
 | `reminder24hSentAt` / `reminder12hSentAt` | timestamp, optional | same reminder system as `events`, same Cloud Function, just pointed at this collection too |
 | `createdAt` / `updatedAt` | timestamp |                                |
 
-## `padelEvents/{eventId}/invites/{invitedPhone}`
+## `padelEvents/{eventId}/padelInvites/{invitedPhone}`
 
 Same shape and purpose as the top-level `invites/{eventId}_{invitedPhone}`
 collection, just nested under its own event instead of using a
 composite id at the top level. Nested specifically so its rules can
 say "same people who can already see the event," rather than
-duplicating the participant-check logic a third time. Not the same
-collection as the top-level `invites` — Your Games invites and Events
-invites are deliberately kept apart.
+duplicating the participant-check logic a third time.
+
+Named `padelInvites`, not `invites` — deliberately not the same name
+as the top-level collection, even though nothing would stop two
+different collections sharing a name in principle. The reason is
+collection-group queries: finding "every event that's invited me"
+means querying across every event's invite subcollection at once
+without knowing the event ids up front, and Firestore's security rules
+for that kind of query apply to *every* collection sharing that name,
+anywhere in the database — regardless of hierarchy. Reusing `invites`
+would mean writing a rule that has to correctly distinguish this
+subcollection from the completely unrelated top-level one every time,
+forever. A unique name sidesteps that risk entirely instead of
+managing it.
 
 ## `padelEvents/{eventId}/tournament/draw`
 
