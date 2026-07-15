@@ -9,6 +9,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js';
 
@@ -54,6 +55,14 @@ export async function createMyProfile(uid, phone, name) {
     name,
     createdAt: serverTimestamp(),
   });
+}
+
+// Phone number is deliberately not editable here — it's the identity
+// the account is keyed by, and changing it would mean re-verifying via
+// OTP, not a plain profile edit. Only name can change, which is also
+// all the security rules permit (see firestore.rules).
+export async function updateMyProfileName(uid, name) {
+  await updateDoc(doc(db, 'users', uid), { name });
 }
 
 export function watchAuthState(callback) {
