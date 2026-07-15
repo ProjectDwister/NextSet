@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <script>
   // Must run before the CSS below, or it can't prevent a flash of the
-  // wrong theme on load. Reads the exact same key NextSet's index.html
+  // wrong theme on load. Reads the exact same key Court Pop's index.html
   // writes to, so a choice made in one place is respected in the other.
   (function () {
     try {
@@ -14,12 +14,12 @@
   })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
-<title>Formats · NextSet</title>
+<title>Formats · Court Pop</title>
 <meta name="description" content="Run a padel Americano or Mexicano tournament: build the draw, keep score courtside, track the leaderboard." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='8' fill='%230F3D8C'/%3E%3Cpath d='M9 16 H23' stroke='%23FFFFFF' stroke-width='2' stroke-dasharray='2.5 2.5' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='9.5' r='3.4' fill='%23B8922B'/%3E%3Ccircle cx='16' cy='22.5' r='3.4' fill='%23FFFFFF'/%3E%3C/svg%3E" />
 
 <!-- No manifest/theme-color/apple-touch-icon here on purpose: this page
-     is now part of NextSet's single install identity (see index.html's
+     is now part of Court Pop's single install identity (see index.html's
      manifest.json), not a second, competing installable app. -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -64,7 +64,7 @@
     var src = e && e.filename ? " (" + e.filename.split("/").pop() + ")" : "";
     rallyReportError("Script error: " + msg + src);
   });
-  // No service worker registration here on purpose — NextSet's own
+  // No service worker registration here on purpose — Court Pop's own
   // sw.js, registered from index.html, already covers this whole site.
   // Registering a second one from this page would just be two service
   // workers competing over an overlapping scope.
@@ -77,15 +77,16 @@
 
 <script type="text/babel" data-presets="react" data-type="module">
 /* ============================================================
-   LIVE SYNC — Firestore, gated by NextSet's own sign-in. Reuses
+   LIVE SYNC — Firestore, gated by Court Pop's own sign-in. Reuses
    the exact same Firebase project as the rest of the app (see
    firebase-config.js) instead of a separate setup, and requires
-   a signed-in NextSet user before anything loads — no local-only
+   a signed-in Court Pop user before anything loads — no local-only
    fallback anymore, since being signed out now just means "go
    sign in on the main page first."
    ============================================================ */
 
 import { auth, db } from './firebase-config.js';
+import { getMyProfile, updateMyProfileName, signOutUser } from './auth.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js';
 import {
   collection, doc, setDoc, onSnapshot, serverTimestamp, runTransaction,
@@ -100,7 +101,7 @@ function getTournamentIdFromUrl() {
 // A tournament is created the moment one is needed and none is in the
 // URL yet — its id is pushed into the URL immediately after, so copying
 // the link from that point on always points back at this same, live
-// tournament for any other signed-in NextSet user who opens it.
+// tournament for any other signed-in Court Pop user who opens it.
 async function ensureTournamentId(uid) {
   const existing = getTournamentIdFromUrl();
   if (existing) return existing;
@@ -992,7 +993,7 @@ function roundIsComplete(round) {
 
 /* ============================================================
    PERSISTENCE — live sync across devices via Firestore, gated on
-   being signed in to NextSet (see the LIVE SYNC block near the
+   being signed in to Court Pop (see the LIVE SYNC block near the
    top of this script for the actual auth/Firestore setup).
    ============================================================ */
 
@@ -1282,12 +1283,6 @@ function SetupScreen({ state, dispatch, onGenerate, syncStatus }) {
 
   return (
     <div className="max-w-xl mx-auto px-4 pb-28 pt-6 sm:pt-10">
-      <div className="flex items-center gap-2.5 mb-1">
-        <Logo size={32} />
-        <div className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
-          Rally
-        </div>
-      </div>
       <p className="text-sm mb-2" style={{ color: "var(--slate)" }}>
         Set up a padel Americano or Mexicano, draw the rounds, and keep score from courtside.
       </p>
@@ -1903,12 +1898,8 @@ function TopBar({ state, activeTab, setActiveTab, onResetClick, syncStatus }) {
     <div className="sticky top-0 z-10" style={{ background: "var(--chalk)", borderBottom: "1px solid var(--line)" }}>
       <div className="max-w-xl mx-auto px-4 pt-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Logo size={22} />
-          <span className="rally-display text-base" style={{ color: "var(--ink)" }}>
-            Formats
-          </span>
           <span
-            className="rally-chip px-2 py-0.5 text-xs font-semibold capitalize ml-1"
+            className="rally-chip px-2.5 py-1 text-xs font-semibold capitalize"
             style={{ color: "var(--slate)" }}
           >
             {state.format}
@@ -1982,6 +1973,104 @@ function ConfirmModal({ title, body, confirmLabel = "Start over", onCancel, onCo
   );
 }
 
+function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, error, theme, onThemeChange, onSignOut, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 flex items-end sm:items-center justify-center p-4 z-50"
+      style={{ background: "rgba(16,25,43,0.5)" }}
+      onClick={onClose}
+    >
+      <div className="rally-card w-full max-w-sm p-5 rally-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="text-base font-bold mb-4" style={{ color: "var(--ink)" }}>
+          Menu
+        </div>
+
+        {error ? (
+          <div
+            className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg"
+            style={{ background: "var(--danger-light)", color: "var(--danger)" }}
+          >
+            {error}
+          </div>
+        ) : null}
+
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>
+          Your name
+        </label>
+        <input
+          type="text"
+          value={nameValue}
+          onChange={(e) => onNameChange(e.target.value)}
+          className="w-full mb-2 px-3 py-2.5 rounded-lg text-sm"
+          style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }}
+        />
+        <button
+          type="button"
+          onClick={onSaveName}
+          disabled={savingName}
+          className="rally-btn-primary w-full py-2.5 text-sm mb-4"
+        >
+          {savingName ? "Saving…" : "Save name"}
+        </button>
+
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>
+          Phone number
+        </label>
+        <input
+          type="tel"
+          value={profile ? profile.phone : ""}
+          disabled
+          className="w-full mb-4 px-3 py-2.5 rounded-lg text-sm"
+          style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--slate)", cursor: "not-allowed" }}
+        />
+
+        <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
+
+        <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--slate)" }}>
+          Appearance
+        </label>
+        <div className="flex gap-1 p-1 rounded-lg mb-4" style={{ background: "var(--chalk)", border: "1px solid var(--line)" }}>
+          <button
+            type="button"
+            onClick={() => onThemeChange("dark")}
+            className="flex-1 py-2 rounded-md text-xs font-semibold"
+            style={theme === "dark" ? { background: "var(--court-blue)", color: "var(--court-blue-ink)" } : { color: "var(--slate)" }}
+          >
+            Dark
+          </button>
+          <button
+            type="button"
+            onClick={() => onThemeChange("light")}
+            className="flex-1 py-2 rounded-md text-xs font-semibold"
+            style={theme === "light" ? { background: "var(--court-blue)", color: "var(--court-blue-ink)" } : { color: "var(--slate)" }}
+          >
+            Light
+          </button>
+        </div>
+
+        <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
+
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-2"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}
+        >
+          Sign out
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold"
+          style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================
    ROOT APP
    ============================================================ */
@@ -1989,6 +2078,14 @@ function ConfirmModal({ title, body, confirmLabel = "Start over", onCancel, onCo
 function RallyApp() {
   const [authChecked, setAuthChecked] = useState(false);
   const [uid, setUid] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuName, setMenuName] = useState('');
+  const [menuError, setMenuError] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [theme, setThemeState] = useState(() => (
+    document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+  ));
   const [tournamentId, setTournamentId] = useState(null);
   const [state, dispatch] = useReducer(reducer, initialState);
   const [loaded, setLoaded] = useState(false);
@@ -2015,7 +2112,7 @@ function RallyApp() {
     state.rounds,
   ]);
 
-  // Step 1: must be signed in via NextSet's own sign-in flow before
+  // Step 1: must be signed in via Court Pop's own sign-in flow before
   // anything here loads. There's no separate sign-in UI on this page on
   // purpose - not signed in just means back to the main page to sign in
   // there, same account either way.
@@ -2030,6 +2127,54 @@ function RallyApp() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Fetches the same account profile Your Games' own menu reads and
+  // writes — same users/{uid} doc, same rules, so a name change here
+  // shows up there too and vice versa.
+  useEffect(() => {
+    if (!uid) return;
+    let cancelled = false;
+    getMyProfile(uid).then((p) => {
+      if (cancelled || !p) return;
+      setProfile(p);
+      setMenuName(p.name || '');
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  function applyTheme(next) {
+    const normalized = next === 'light' ? 'light' : 'dark';
+    if (normalized === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    try { localStorage.setItem('nextset-theme', normalized); } catch (e) {}
+    setThemeState(normalized);
+  }
+
+  async function handleSaveName() {
+    const name = menuName.trim();
+    if (!name) {
+      setMenuError('Enter a name.');
+      return;
+    }
+    setSavingName(true);
+    setMenuError('');
+    try {
+      await updateMyProfileName(uid, name);
+      setProfile((p) => ({ ...(p || {}), name }));
+    } catch (e) {
+      setMenuError('Could not save — try again.');
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOutUser();
+    location.replace('index.html?nav=1');
+  }
 
   // Step 2: once signed in, resolve which tournament this tab is looking
   // at (from ?t= in the URL, or a freshly created one if this is a brand
@@ -2125,19 +2270,43 @@ function RallyApp() {
     <div className="rally-root">
       <style>{GLOBAL_STYLES}</style>
 
-      <div className="max-w-xl mx-auto px-4 pt-3">
-        <a
-          href="index.html?nav=1"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
-          style={{
-            color: "var(--slate)",
-            background: "var(--card)",
-            border: "1px solid var(--line)",
-            textDecoration: "none",
-          }}
-        >
-          &larr; NextSet
-        </a>
+      <div className="max-w-xl mx-auto px-4 pt-3 flex items-center justify-between">
+        <div>
+          <div
+            className="text-xs font-bold uppercase mb-0.5"
+            style={{ color: "var(--slate)", letterSpacing: "0.04em" }}
+          >
+            Court Pop
+          </div>
+          <div className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
+            Formats
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            className="w-9 h-9 flex items-center justify-center rounded-lg"
+            style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--slate)" }}
+            aria-label="Menu"
+          >
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M3 6h14M3 10h14M3 14h14" />
+            </svg>
+          </button>
+          <a
+            href="index.html?nav=1"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
+            style={{
+              color: "var(--slate)",
+              background: "var(--card)",
+              border: "1px solid var(--line)",
+              textDecoration: "none",
+            }}
+          >
+            &larr; Your Games
+          </a>
+        </div>
       </div>
 
       {state.stage === "tournament" ? (
@@ -2155,9 +2324,24 @@ function RallyApp() {
       {confirmReset ? (
         <ConfirmModal
           title="Start a new tournament?"
-          body="This clears the current players, draw and scores for everyone viewing this Rally board."
+          body="This clears the current players, draw and scores for everyone viewing this tournament."
           onCancel={() => setConfirmReset(false)}
           onConfirm={handleConfirmReset}
+        />
+      ) : null}
+
+      {menuOpen ? (
+        <MenuModal
+          profile={profile}
+          nameValue={menuName}
+          onNameChange={setMenuName}
+          onSaveName={handleSaveName}
+          savingName={savingName}
+          error={menuError}
+          theme={theme}
+          onThemeChange={applyTheme}
+          onSignOut={handleSignOut}
+          onClose={() => { setMenuOpen(false); setMenuError(''); }}
         />
       ) : null}
     </div>

@@ -1,6 +1,6 @@
 {
-  "name": "NextSet",
-  "short_name": "NextSet",
+  "name": "Court Pop",
+  "short_name": "Court Pop",
   "description": "Padel games with your group — private by default, shared only once someone accepts an invite.",
   "start_url": "./index.html",
   "scope": "./",
