@@ -467,14 +467,19 @@
 <body>
 
   <script>
-    // If Formats was the last section open, jump straight back to it on a
-    // fresh launch (e.g. tapping the home-screen icon) — but never
-    // override an explicit navigation click, which is how both this
-    // page and rally.html always link to each other (?nav=1).
+    // If Formats or Events was the last section open, jump straight
+    // back to it on a fresh launch (e.g. tapping the home-screen icon)
+    // — but never override an explicit navigation click, which is how
+    // every page always links to the others (?nav=1).
     (function () {
       var params = new URLSearchParams(location.search);
-      if (!params.has('nav') && localStorage.getItem('nextset-last-section') === 'rally') {
+      var last = localStorage.getItem('nextset-last-section');
+      if (!params.has('nav') && last === 'rally') {
         location.replace('rally.html');
+        return;
+      }
+      if (!params.has('nav') && last === 'events') {
+        location.replace('events.html');
         return;
       }
       try { localStorage.setItem('nextset-last-section', 'main'); } catch (e) {}
@@ -658,7 +663,8 @@
     <div class="modal">
       <h2>Menu</h2>
 
-      <a href="rally.html?nav=1" class="modal-link-btn" style="margin-top:0; margin-bottom:16px;">Switch to Formats</a>
+      <a href="rally.html?nav=1" class="modal-link-btn" style="margin-top:0; margin-bottom:8px;">Switch to Formats</a>
+      <a href="events.html?nav=1" class="modal-link-btn" style="margin-top:0; margin-bottom:16px;">Switch to Events</a>
 
       <div id="menu-error" class="error"></div>
 

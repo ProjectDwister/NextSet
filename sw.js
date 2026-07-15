@@ -1,10 +1,11 @@
 // Bump this whenever the app-shell file list below changes; old caches
 // get cleaned up automatically on activate.
-const CACHE_NAME = 'nextset-v10';
+const CACHE_NAME = 'nextset-v11';
 
 const APP_SHELL = [
   './index.html',
   './rally.html',
+  './events.html',
   './auth.js',
   './events.js',
   './invites.js',
