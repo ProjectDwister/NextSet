@@ -1,10 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
+<meta charset="UTF-8" />
 <script>
-  // Same key, same mechanism as index.html and rally.html — one theme
-  // choice, respected everywhere.
   (function () {
     try {
       var saved = localStorage.getItem('nextset-theme');
@@ -12,7 +10,7 @@
     } catch (e) {}
   })();
 </script>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
 <title>Events · Court Pop</title>
 <link rel="manifest" href="./manifest.json"/>
 <link rel="icon" href="./icons/icon-192.png"/>
@@ -21,9 +19,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Court Pop"/>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&family=Fraunces:ital,wght@0,500;1,500&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0b1020;
@@ -462,188 +460,1261 @@
     }
   }
 </style>
+<script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
 
 <script>
-  // Marks Events as the current section for the "reopen where I left
-  // off" behaviour. No redirect-away logic needed here, same as
-  // rally.html — index.html is the only page that ever redirects
-  // toward a remembered section.
+  window.__eventsMounted = false;
+  function eventsReportError(label) {
+    var box = document.getElementById("events-boot-errors");
+    if (!box || window.__eventsMounted) return;
+    var line = document.createElement("div");
+    line.textContent = label;
+    line.style.color = "#ff9a92";
+    line.style.padding = "8px 0";
+    box.appendChild(line);
+  }
+  window.addEventListener("error", function (e) {
+    if (window.__eventsMounted) return;
+    eventsReportError("Script error: " + (e && e.message ? e.message : "unknown"));
+  });
   try { localStorage.setItem('nextset-last-section', 'events'); } catch (e) {}
 </script>
 
-<div id="loading-view" style="display:flex; align-items:center; justify-content:center; min-height:100vh;">
-  <div style="color:var(--muted); font-size:0.9rem;">Loading…</div>
+<div id="events-boot-status" style="min-height:60vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--muted); font-family:sans-serif;">
+  <div>Loading Events…</div>
+  <div id="events-boot-errors" style="max-width:320px; text-align:center; font-size:0.85rem;"></div>
 </div>
 
-<div class="view" id="view-app" style="display:none;">
-  <header class="app-header">
-    <div class="app-header-top">
-      <div class="app-brand-row">
-        <span class="app-brand">Court <span class="app-brand-pop">Pop</span></span>
-        <span class="app-brand-sep">-</span>
-        <span class="app-title">Events</span>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onerror="eventsReportError('Failed to load React from unpkg.com')"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onerror="eventsReportError('Failed to load ReactDOM from unpkg.com')"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js" onerror="eventsReportError('Failed to load Babel from unpkg.com')"></script>
+
+<script type="text/babel" data-presets="react" data-type="module">
+
+import { auth, db } from './firebase-config.js';
+import { getMyProfile, updateMyProfileName, signOutUser } from './auth.js';
+import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js';
+import {
+  toTimestamp,
+  getPadelEvent,
+  createPadelEvent,
+  updatePadelEvent,
+  addOrganizer,
+  removeOrganizer,
+  watchMyPadelEvents,
+  sendPadelEventInvite,
+  watchMyPadelEventInvites,
+  declinePadelEventInvite,
+  acceptPadelEventInvite,
+  watchPadelTournament,
+  syncPadelScoreField,
+} from './padelEvents.js';
+
+const { useEffect, useMemo, useState } = React;
+
+const GLOBAL_STYLES = `
+.rally-root {
+  --ink: #eef2ff;
+  --court-blue: #78e08f;
+  --court-blue-deep: #3fb35e;
+  --court-blue-mid: #5fcf7a;
+  --court-blue-light: rgba(120,224,143,0.12);
+  --court-blue-ink: #06210f;
+  --chalk: #0b1020;
+  --card: #121933;
+  --ball: #c9a869;
+  --ball-dark: #a6884f;
+  --ball-light: rgba(201,168,105,0.14);
+  --slate: #aab4d6;
+  --slate-light: #7c86a8;
+  --line: rgba(255,255,255,0.09);
+  --line-strong: rgba(255,255,255,0.16);
+  --danger: #c0392b;
+  --danger-light: rgba(192,57,43,0.16);
+  --chip-solid: #14182a;
+  --chip-solid-ink: #ffffff;
+  --court-blue-highlight: #3d2b0a;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.25), 0 1px 1px rgba(0,0,0,.15);
+  --shadow-md: 0 10px 26px -8px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.25);
+  --shadow-lg: 0 24px 56px -16px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.3);
+  font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+  background: var(--chalk);
+  background-image:
+    radial-gradient(1200px 480px at 50% -120px, rgba(120,224,143,0.05), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  color: var(--ink);
+  min-height: 100vh;
+  width: 100%;
+}
+
+:root[data-theme="light"] .rally-root {
+  --ink: #14182a;
+  --court-blue: #2f9e5c;
+  --court-blue-deep: #1f7a45;
+  --court-blue-mid: #268a4f;
+  --court-blue-light: rgba(47,158,92,0.08);
+  --court-blue-ink: #ffffff;
+  --court-blue-highlight: #fff8e8;
+  --chalk: #f6f4ef;
+  --card: #ffffff;
+  --ball: #93711f;
+  --ball-dark: #6b5316;
+  --ball-light: rgba(147,113,31,0.1);
+  --slate: #5c6478;
+  --slate-light: #8890a3;
+  --line: rgba(11,18,32,0.10);
+  --line-strong: rgba(11,18,32,0.16);
+  --danger: #c0392b;
+  --danger-light: #fbecea;
+  --shadow-sm: 0 1px 2px rgba(11,18,32,.05), 0 1px 1px rgba(11,18,32,.03);
+  --shadow-md: 0 10px 26px -8px rgba(11,18,32,.14), 0 2px 6px rgba(11,18,32,.05);
+  --shadow-lg: 0 24px 56px -16px rgba(11,18,32,.24), 0 4px 12px rgba(11,18,32,.08);
+  background-image:
+    radial-gradient(1200px 480px at 50% -120px, rgba(47,158,92,0.05), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+}
+
+.rally-root * { box-sizing: border-box; }
+
+.rally-display {
+  font-family: 'Archivo Black', Impact, 'Archivo', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.rally-tabular { font-variant-numeric: tabular-nums; }
+
+.rally-root button { font-family: inherit; cursor: pointer; }
+.rally-root input { font-family: inherit; }
+
+.rally-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+
+.app-brand-pop {
+  display: inline-block;
+  animation: pop-color-cycle 5s ease-in-out infinite;
+}
+@keyframes pop-color-cycle {
+  0%   { color: #e0b23a; opacity: 0.7; }
+  20%  { color: #ff6fb5; opacity: 1; }
+  40%  { color: #78e08f; opacity: 0.85; }
+  60%  { color: #6fa8ff; opacity: 1; }
+  80%  { color: #ff9f5a; opacity: 0.85; }
+  100% { color: #e0b23a; opacity: 0.7; }
+}
+.rally-scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+
+.rally-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.rally-court-card {
+  background: linear-gradient(160deg, var(--court-blue-mid) 0%, var(--court-blue) 45%, var(--court-blue-deep) 100%);
+  border-radius: 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.rally-court-card::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 1.5px solid rgba(255,255,255,0.16);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.rally-court-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 65% at 12% -15%, rgba(255,255,255,0.18), transparent 60%);
+  pointer-events: none;
+}
+
+.rally-net-line {
+  position: relative;
+  height: 0;
+  border-top: 2px dashed rgba(255,255,255,0.45);
+  margin: 2px 22px;
+}
+.rally-net-line::before,
+.rally-net-line::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.8);
+}
+.rally-net-line::before { left: -4px; }
+.rally-net-line::after { right: -4px; }
+
+.rally-court-card .rally-score-input {
+  width: 4.5rem;
+  text-align: center;
+  font-family: 'Archivo Black', Impact, sans-serif;
+  font-size: 1.75rem;
+  color: #FFFFFF;
+  background: rgba(0,0,0,0.16);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  padding: 0.35rem 0.25rem;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.22), inset 0 -1px 0 rgba(255,255,255,0.05);
+  -moz-appearance: textfield;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.rally-score-input::-webkit-outer-spin-button,
+.rally-score-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.rally-score-input::placeholder { color: rgba(255,255,255,0.4); }
+.rally-court-card .rally-score-input:focus {
+  outline: none;
+  border-color: var(--ball);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.22), 0 0 0 3px rgba(184,146,43,0.3);
+}
+
+.rally-winner-glow {
+  color: var(--ball) !important;
+  transition: color 0.3s ease;
+}
+
+.rally-format-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  text-align: left;
+  position: relative;
+}
+.rally-format-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); }
+.rally-format-card.selected {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+}
+.rally-format-card.selected::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 18px; right: 18px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, var(--court-blue), var(--ball));
+}
+
+.rally-btn-primary {
+  background: var(--court-blue);
+  color: var(--court-blue-ink);
+  border-radius: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-md);
+  transition: background 0.2s ease, transform 0.08s ease, box-shadow 0.2s ease;
+}
+.rally-btn-primary:hover:not(:disabled) { background: var(--court-blue-deep); box-shadow: var(--shadow-lg); }
+.rally-btn-primary:active:not(:disabled) { transform: scale(0.985); }
+.rally-btn-primary:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+
+.rally-chip {
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.rally-tab-btn {
+  border-radius: 12px;
+  font-weight: 600;
+  color: var(--slate);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.rally-tab-btn.active {
+  background: var(--chip-solid);
+  color: var(--chip-solid-ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.rally-stepper-btn {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.rally-stepper-btn:hover:not(:disabled) { border-color: var(--court-blue); background: var(--chalk); }
+.rally-stepper-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.rally-fade-in { animation: rallyFadeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes rallyFadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rally-spin { animation: rallySpin 0.9s linear infinite; }
+@keyframes rallySpin { to { transform: rotate(360deg); } }
+
+.rally-root :focus-visible {
+  outline: 2px solid var(--court-blue);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rally-root * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+`;
+
+/* ============================================================
+   Small display helpers — ported from rally.html (computeStandings,
+   playerName, playerById, roundIsComplete). Kept deliberately simple
+   and duplicated rather than shared across files, since these are
+   short, low-risk display functions, not the actual generation
+   algorithm (which is the one thing that lives in exactly one place,
+   the Cloud Function, on purpose).
+   ============================================================ */
+
+function playerName(players, id) {
+  const idx = players.findIndex((p) => p.id === id);
+  if (idx === -1) return "—";
+  const p = players[idx];
+  return p.name && p.name.trim() ? p.name.trim() : `Player ${idx + 1}`;
+}
+
+function playerById(players, id) {
+  return players.find((p) => p.id === id) || null;
+}
+
+function roundIsComplete(round) {
+  return round.courts.every((c) => c.scoreA != null && c.scoreB != null);
+}
+
+function computeStandings(players, rounds) {
+  const points = {};
+  const against = {};
+  const played = {};
+  const wins = {};
+  players.forEach((p) => {
+    points[p.id] = 0;
+    against[p.id] = 0;
+    played[p.id] = 0;
+    wins[p.id] = 0;
+  });
+  rounds.forEach((round) => {
+    round.courts.forEach((court) => {
+      if (court.scoreA == null || court.scoreB == null) return;
+      const aWon = court.scoreA > court.scoreB;
+      const bWon = court.scoreB > court.scoreA;
+      court.teamA.forEach((id) => {
+        points[id] += court.scoreA;
+        against[id] += court.scoreB;
+        played[id] += 1;
+        if (aWon) wins[id] += 1;
+      });
+      court.teamB.forEach((id) => {
+        points[id] += court.scoreB;
+        against[id] += court.scoreA;
+        played[id] += 1;
+        if (bWon) wins[id] += 1;
+      });
+    });
+  });
+  return players
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      points: points[p.id],
+      against: against[p.id],
+      diff: points[p.id] - against[p.id],
+      played: played[p.id],
+      wins: wins[p.id],
+    }))
+    .sort((a, b) => b.points - a.points || b.diff - a.diff || b.wins - a.wins);
+}
+
+function suggestedRounds(numPlayers) {
+  if (numPlayers <= 8) return Math.max(4, numPlayers - 1);
+  if (numPlayers <= 16) return 8;
+  return 7;
+}
+
+function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, error, theme, onThemeChange, onSignOut, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 flex items-end sm:items-center justify-center p-4 z-50"
+      style={{ background: "rgba(16,25,43,0.5)" }}
+      onClick={onClose}
+    >
+      <div className="rally-card w-full max-w-sm p-5 rally-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="text-base font-bold mb-4" style={{ color: "var(--ink)" }}>
+          Menu
+        </div>
+
+        <a
+          href="index.html?nav=1"
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-2 flex items-center justify-center"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)", textDecoration: "none" }}
+        >
+          Switch to Your Games
+        </a>
+        <a
+          href="rally.html?nav=1"
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-4 flex items-center justify-center"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)", textDecoration: "none" }}
+        >
+          Switch to Formats
+        </a>
+
+        {error ? (
+          <div
+            className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg"
+            style={{ background: "var(--danger-light)", color: "var(--danger)" }}
+          >
+            {error}
+          </div>
+        ) : null}
+
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>
+          Your name
+        </label>
+        <input
+          type="text"
+          value={nameValue}
+          onChange={(e) => onNameChange(e.target.value)}
+          className="w-full mb-2 px-3 py-2.5 rounded-lg text-sm"
+          style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }}
+        />
+        <button
+          type="button"
+          onClick={onSaveName}
+          disabled={savingName}
+          className="rally-btn-primary w-full py-2.5 text-sm mb-4"
+        >
+          {savingName ? "Saving\u2026" : "Save name"}
+        </button>
+
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>
+          Phone number
+        </label>
+        <input
+          type="tel"
+          value={profile ? profile.phone : ""}
+          disabled
+          className="w-full mb-4 px-3 py-2.5 rounded-lg text-sm"
+          style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--slate)", cursor: "not-allowed" }}
+        />
+
+        <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
+
+        <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--slate)" }}>
+          Appearance
+        </label>
+        <div className="flex gap-1 p-1 rounded-lg mb-4" style={{ background: "var(--chalk)", border: "1px solid var(--line)" }}>
+          <button
+            type="button"
+            onClick={() => onThemeChange("dark")}
+            className="flex-1 py-2 rounded-md text-xs font-semibold"
+            style={theme === "dark" ? { background: "var(--court-blue)", color: "var(--court-blue-ink)" } : { color: "var(--slate)" }}
+          >
+            Dark
+          </button>
+          <button
+            type="button"
+            onClick={() => onThemeChange("light")}
+            className="flex-1 py-2 rounded-md text-xs font-semibold"
+            style={theme === "light" ? { background: "var(--court-blue)", color: "var(--court-blue-ink)" } : { color: "var(--slate)" }}
+          >
+            Light
+          </button>
+        </div>
+
+        <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
+
+        <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--slate)" }}>
+          History
+        </label>
+        <a
+          href="index.html?nav=1&view=history"
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-2 flex items-center justify-center"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)", textDecoration: "none" }}
+        >
+          Your Games History
+        </a>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-2"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}
+        >
+          Formats History
+        </button>
+
+        <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
+
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-2"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}
+        >
+          Sign out
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold"
+          style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}
+        >
+          Close
+        </button>
       </div>
-      <button id="menu-btn" class="gear-btn" type="button" aria-label="Settings">
-        <svg viewBox="0 0 20 20" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-          <circle cx="10" cy="10" r="5" />
-          <circle cx="10" cy="10" r="1.8" />
-          <line x1="15" y1="10" x2="17.3" y2="10" />
-          <line x1="13.54" y1="13.54" x2="15.16" y2="15.16" />
-          <line x1="10" y1="15" x2="10" y2="17.3" />
-          <line x1="6.46" y1="13.54" x2="4.84" y2="15.16" />
-          <line x1="5" y1="10" x2="2.7" y2="10" />
-          <line x1="6.46" y1="6.46" x2="4.84" y2="4.84" />
-          <line x1="10" y1="5" x2="10" y2="2.7" />
-          <line x1="13.54" y1="6.46" x2="15.16" y2="4.84" />
-        </svg>
+    </div>
+  );
+}
+
+function CreateEventForm({ onCreate, creating, error }) {
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [durationMin, setDurationMin] = useState(120);
+  const [location, setLocation] = useState("");
+  const [courts, setCourts] = useState("");
+  const [capacity, setCapacity] = useState(12);
+  const [notes, setNotes] = useState("");
+  const [localError, setLocalError] = useState("");
+
+  const numCourts = Math.max(1, Math.floor(Number(capacity) / 4));
+  const capacityValid = Number(capacity) >= 4 && Number(capacity) % 4 === 0;
+
+  const handleSubmit = () => {
+    if (!date || !startTime) return setLocalError("Pick a date and start time.");
+    if (!location.trim()) return setLocalError("Add a venue.");
+    if (!capacityValid) return setLocalError("Total players must be a multiple of 4 (so every court stays full).");
+    setLocalError("");
+    onCreate({
+      dateTime: toTimestamp(date, startTime),
+      durationMin: Number(durationMin),
+      location: location.trim(),
+      courts: courts.trim() || `${numCourts} court${numCourts === 1 ? "" : "s"}`,
+      capacity: Number(capacity),
+      numRounds: suggestedRounds(Number(capacity)),
+      pointsTarget: 24,
+      notes: notes.trim(),
+    });
+  };
+
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-28">
+      <div className="rally-display text-xl mb-1" style={{ color: "var(--ink)" }}>
+        New event
+      </div>
+      <p className="text-sm mb-6" style={{ color: "var(--slate)" }}>
+        A capacity-gated Americano \u2014 invite everyone, and once every spot is filled, the draw generates itself.
+      </p>
+
+      {(localError || error) ? (
+        <div
+          className="text-sm font-semibold mb-4 px-3 py-2.5 rounded-lg"
+          style={{ background: "var(--danger-light)", color: "var(--danger)" }}
+        >
+          {localError || error}
+        </div>
+      ) : null}
+
+      <div className="rally-card p-4 mb-4">
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg text-sm"
+              style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+          </div>
+          <div>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Start time</label>
+            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg text-sm"
+              style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+          </div>
+        </div>
+
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Duration (minutes)</label>
+        <input type="number" min="30" step="15" value={durationMin} onChange={(e) => setDurationMin(e.target.value)}
+          className="w-full mb-3 px-3 py-2.5 rounded-lg text-sm"
+          style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Venue</label>
+        <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Glasscourt, Chembur"
+          className="w-full mb-3 px-3 py-2.5 rounded-lg text-sm"
+          style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Total players</label>
+            <input type="number" min="4" step="4" value={capacity} onChange={(e) => setCapacity(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg text-sm rally-tabular"
+              style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+            <div className="text-xs mt-1" style={{ color: "var(--slate)" }}>
+              {capacityValid ? `\u2192 ${numCourts} court${numCourts === 1 ? "" : "s"}` : "Must be a multiple of 4"}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Courts (optional label)</label>
+            <input type="text" value={courts} onChange={(e) => setCourts(e.target.value)} placeholder="e.g. Courts 1-3"
+              className="w-full px-3 py-2.5 rounded-lg text-sm"
+              style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="rally-card p-4 mb-6">
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Notes (optional)</label>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows="2"
+          className="w-full px-3 py-2.5 rounded-lg text-sm"
+          style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)", resize: "vertical" }} />
+      </div>
+
+      <button type="button" onClick={handleSubmit} disabled={creating}
+        className="rally-btn-primary w-full py-3.5 text-sm">
+        {creating ? "Creating\u2026" : "Create event"}
       </button>
     </div>
-  </header>
-  <main class="app-main">
-    <div class="empty" style="margin-top:32px;">
-      <p style="font-size:1rem; color:var(--text); margin-bottom:6px; font-weight:600;">Events is on its way</p>
-      <p style="font-size:0.85rem; color:var(--muted); line-height:1.5;">
-        This section is a placeholder for now — the page, navigation, and menu are fully wired up,
-        but what actually lives here hasn't been decided yet.
-      </p>
-    </div>
-  </main>
-</div>
+  );
+}
 
-<!-- ===== menu modal ===== -->
-<div class="modal-backdrop" id="menu-modal-backdrop">
-  <div class="modal">
-    <h2>Menu</h2>
+function formatEventWhen(ev) {
+  const start = ev.dateTime.toDate ? ev.dateTime.toDate() : new Date(ev.dateTime);
+  const end = new Date(start.getTime() + (ev.durationMin || 0) * 60000);
+  const dayStr = start.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const startStr = start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const endStr = end.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${dayStr} \u00b7 ${startStr} \u2013 ${endStr}`;
+}
 
-    <a href="index.html?nav=1" class="modal-link-btn" style="margin-top:0; margin-bottom:8px;">Switch to Your Games</a>
-    <a href="rally.html?nav=1" class="modal-link-btn" style="margin-top:0; margin-bottom:16px;">Switch to Formats</a>
+function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganizerChange }) {
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [orgError, setOrgError] = useState("");
 
-    <div id="menu-error" class="error"></div>
+  const participants = Object.entries(event.participantNames || {});
+  const organizers = event.organizers || [];
+  const spotsLeft = event.capacity - (event.participants || []).length;
 
-    <label for="menu-name">Your name</label>
-    <input id="menu-name" type="text" autocomplete="name" />
-    <button id="menu-save-name-btn" class="btn-sm" type="button" style="width:100%; margin-bottom:14px;">Save name</button>
-
-    <label for="menu-phone">Phone number</label>
-    <input id="menu-phone" type="tel" disabled />
-
-    <div class="menu-divider"></div>
-
-    <label>Appearance</label>
-    <div class="theme-toggle" id="theme-toggle">
-      <button type="button" class="theme-toggle-option" data-theme-choice="dark">Dark</button>
-      <button type="button" class="theme-toggle-option" data-theme-choice="light">Light</button>
-    </div>
-
-    <div class="menu-divider"></div>
-
-    <button id="menu-signout-btn" class="secondary" type="button">Sign out</button>
-    <button id="menu-close-btn" class="secondary" type="button">Close</button>
-  </div>
-</div>
-
-<script type="module">
-  import { auth } from './firebase-config.js';
-  import { getMyProfile, updateMyProfileName, signOutUser } from './auth.js';
-  import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js';
-
-  const $ = (id) => document.getElementById(id);
-  let currentUser = null;
-  let currentProfile = null;
-
-  // ---------------- theme ----------------
-  function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  }
-  function applyTheme(theme) {
-    const normalized = theme === 'light' ? 'light' : 'dark';
-    if (normalized === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    try { localStorage.setItem('nextset-theme', normalized); } catch (e) {}
-    const metaEl = $('theme-color-meta');
-    if (metaEl) metaEl.setAttribute('content', normalized === 'light' ? '#f6f4ef' : '#0b1020');
-    document.querySelectorAll('.theme-toggle-option').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.themeChoice === normalized);
-    });
-  }
-  document.querySelectorAll('.theme-toggle-option').forEach((btn) => {
-    btn.addEventListener('click', () => applyTheme(btn.dataset.themeChoice));
-  });
-  applyTheme(currentTheme());
-
-  function setBusy(button, busy, busyLabel) {
-    button.disabled = busy;
-    if (busy) {
-      button.dataset.originalLabel = button.textContent;
-      button.textContent = busyLabel;
-    } else if (button.dataset.originalLabel) {
-      button.textContent = button.dataset.originalLabel;
-    }
-  }
-
-  // ---------------- menu modal ----------------
-  function openMenu() {
-    $('menu-error').textContent = '';
-    $('menu-error').classList.remove('show');
-    $('menu-name').value = currentProfile ? currentProfile.name : '';
-    $('menu-phone').value = currentProfile ? currentProfile.phone : '';
-    $('menu-modal-backdrop').classList.add('active');
-  }
-  $('menu-btn').addEventListener('click', openMenu);
-  $('menu-close-btn').addEventListener('click', () => {
-    $('menu-modal-backdrop').classList.remove('active');
-  });
-
-  $('menu-save-name-btn').addEventListener('click', async () => {
-    const name = $('menu-name').value.trim();
-    const errEl = $('menu-error');
-    if (!name) {
-      errEl.textContent = 'Enter a name.';
-      errEl.classList.add('show');
-      return;
-    }
-    const btn = $('menu-save-name-btn');
-    setBusy(btn, true, 'Saving…');
+  const handleInvite = async () => {
+    const digits = phone.replace(/[^0-9+]/g, "");
+    if (!digits) return setError("Enter a phone number.");
+    setSending(true);
+    setError("");
     try {
-      await updateMyProfileName(currentUser.uid, name);
-      currentProfile.name = name;
-      errEl.textContent = '';
-      errEl.classList.remove('show');
-    } catch (err) {
-      errEl.textContent = 'Could not save — try again.';
-      errEl.classList.add('show');
-    } finally {
-      setBusy(btn, false);
-    }
-  });
-
-  $('menu-signout-btn').addEventListener('click', async () => {
-    await signOutUser();
-    window.location.reload();
-  });
-
-  // ---------------- auth gate ----------------
-  // No sign-in UI on this page on purpose, same as rally.html — not
-  // signed in just means back to the main page to sign in there.
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      location.replace('index.html?nav=1');
-      return;
-    }
-    currentUser = user;
-    try {
-      currentProfile = await getMyProfile(user.uid);
+      await sendPadelEventInvite(eventId, digits, name.trim(), myUid);
+      setPhone("");
+      setName("");
+      onInvited();
     } catch (e) {
-      currentProfile = null;
+      setError(e && e.message ? e.message : "Could not send invite.");
+    } finally {
+      setSending(false);
     }
-    $('loading-view').style.display = 'none';
-    $('view-app').style.display = '';
-  });
+  };
+
+  const makeOrganizer = async (uid, personName) => {
+    setOrgError("");
+    try {
+      await addOrganizer(eventId, uid, personName);
+    } catch (e) {
+      setOrgError(e && e.message ? e.message : "Could not add organizer.");
+    }
+  };
+
+  const revokeOrganizer = async (uid) => {
+    setOrgError("");
+    try {
+      await removeOrganizer(eventId, uid);
+    } catch (e) {
+      setOrgError(e && e.message ? e.message : "Could not remove organizer.");
+    }
+  };
+
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-28">
+      <div className="rally-display text-xl mb-1" style={{ color: "var(--ink)" }}>
+        {event.location}
+      </div>
+      <p className="text-sm mb-1" style={{ color: "var(--slate)" }}>{formatEventWhen(event)}</p>
+      <p className="text-sm mb-5" style={{ color: "var(--slate)" }}>{event.courts}</p>
+
+      <div className="rally-card p-4 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-bold" style={{ color: "var(--ink)" }}>
+            {(event.participants || []).length} / {event.capacity} joined
+          </span>
+          <span className="rally-chip px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--slate)" }}>
+            {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left` : "Full \u2014 generating draw\u2026"}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {participants.map(([uid, pname]) => (
+            <span key={uid} className="rally-chip px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--ink)" }}>
+              {pname}{organizers.includes(uid) ? " \u2605" : ""}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {isOrganizer ? (
+        <div className="rally-card p-4 mb-5">
+          <div className="text-sm font-bold mb-3" style={{ color: "var(--ink)" }}>Invite someone</div>
+          {error ? (
+            <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+              {error}
+            </div>
+          ) : null}
+          <div className="flex gap-2 mb-2">
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91..."
+              className="flex-1 px-3 py-2.5 rounded-lg text-sm"
+              style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)"
+              className="flex-1 px-3 py-2.5 rounded-lg text-sm"
+              style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+          </div>
+          <button type="button" onClick={handleInvite} disabled={sending} className="rally-btn-primary w-full py-2.5 text-sm">
+            {sending ? "Sending\u2026" : "Send invite"}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="rally-card p-4">
+        <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizers</div>
+        <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+          Up to 4. Organizers can invite, edit, and manage scoring \u2014 whether or not they're playing.
+        </div>
+        {orgError ? (
+          <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+            {orgError}
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {organizers.map((uid) => (
+            <span key={uid} className="rally-chip px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
+              {(event.participantNames || {})[uid] || "Someone"}
+              {isOrganizer && organizers.length > 1 ? (
+                <button type="button" onClick={() => revokeOrganizer(uid)} style={{ color: "var(--danger)", fontWeight: 700 }}>&times;</button>
+              ) : null}
+            </span>
+          ))}
+        </div>
+        {isOrganizer && organizers.length < 4 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {participants.filter(([uid]) => !organizers.includes(uid)).map(([uid, pname]) => (
+              <button key={uid} type="button" onClick={() => makeOrganizer(uid, pname)}
+                className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                style={{ border: "1px dashed var(--line-strong)", color: "var(--slate)" }}>
+                + Make {pname} an organizer
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EventTeamLabel({ players, ids, winning, align = "left" }) {
+  return (
+    <div className={"min-w-0 flex-1" + (align === "right" ? " text-right" : "")}>
+      {ids.map((id) => (
+        <div key={id} className="text-sm font-bold truncate"
+          style={{
+            color: winning ? "var(--court-blue-highlight)" : "var(--court-blue-ink)",
+            opacity: winning ? 1 : 0.75,
+            transition: "color 0.3s ease",
+          }}>
+          {playerName(players, id)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EventCourtCard({ court, players, onScoreChange }) {
+  const aHas = court.scoreA != null;
+  const bHas = court.scoreB != null;
+  const aWins = aHas && bHas && court.scoreA > court.scoreB;
+  const bWins = aHas && bHas && court.scoreB > court.scoreA;
+
+  const handleChange = (field) => (e) => {
+    const raw = e.target.value.replace(/[^0-9]/g, "").slice(0, 3);
+    onScoreChange(field, raw === "" ? null : parseInt(raw, 10));
+  };
+
+  return (
+    <div className="rally-court-card p-4">
+      <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--court-blue-ink)", opacity: 0.75 }}>
+        Court {court.court}
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <EventTeamLabel players={players} ids={court.teamA} winning={aWins} />
+        <input inputMode="numeric" pattern="[0-9]*" className="rally-score-input rally-tabular"
+          value={court.scoreA == null ? "" : String(court.scoreA)} onChange={handleChange("scoreA")}
+          placeholder="0" aria-label="Team A score" />
+      </div>
+      <div className="rally-net-line my-3" />
+      <div className="flex items-center justify-between gap-3">
+        <input inputMode="numeric" pattern="[0-9]*" className="rally-score-input rally-tabular"
+          value={court.scoreB == null ? "" : String(court.scoreB)} onChange={handleChange("scoreB")}
+          placeholder="0" aria-label="Team B score" />
+        <EventTeamLabel players={players} ids={court.teamB} winning={bWins} align="right" />
+      </div>
+    </div>
+  );
+}
+
+function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, expanded, onToggle, pointsTarget, eventId }) {
+  const complete = roundIsComplete(round);
+  return (
+    <div className="mb-4 rally-fade-in">
+      <button type="button" onClick={onToggle} className="w-full flex items-center justify-between py-2.5 px-1"
+        style={{ borderBottom: expanded ? "1px solid var(--line)" : "1px solid transparent" }}>
+        <div className="flex items-center gap-2">
+          <span className="rally-display text-base" style={{ color: "var(--ink)" }}>Round {roundIndex + 1}</span>
+          <span className="text-xs" style={{ color: "var(--slate)" }}>of {totalRounds}</span>
+          {complete ? (
+            <span className="w-4 h-4 rounded-full flex items-center justify-center" style={{ background: "var(--court-blue)", color: "var(--court-blue-ink)", fontSize: "10px", fontWeight: 700 }}>
+              &#10003;
+            </span>
+          ) : null}
+        </div>
+        <span style={{ color: "var(--slate)" }}>{expanded ? "\u25B4" : "\u25BE"}</span>
+      </button>
+
+      {expanded ? (
+        <div className="rally-fade-in">
+          <div className="text-xs mt-3 mb-3 px-1" style={{ color: "var(--slate)" }}>Playing to {pointsTarget} pts</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {round.courts.map((court) => (
+              <EventCourtCard key={court.court} court={court} players={players}
+                onScoreChange={(field, value) => {
+                  dispatch({ roundIndex, court: court.court, field, value });
+                  syncPadelScoreField(eventId, roundIndex, court.court, field, value);
+                }} />
+            ))}
+          </div>
+          {round.sittingOut && round.sittingOut.length ? (
+            <div className="text-xs mt-3 px-1" style={{ color: "var(--slate)" }}>
+              Resting: {round.sittingOut.map((id) => playerName(players, id)).join(", ")}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="px-1 pb-1">
+          {round.courts.map((court) => (
+            <div key={court.court} className="text-xs py-0.5 truncate" style={{ color: "var(--slate)" }}>
+              C{court.court}: {court.teamA.map((id) => playerName(players, id)).join(" & ")}{" "}
+              <span className="rally-tabular font-semibold" style={{ color: "var(--ink)" }}>
+                {court.scoreA ?? "\u2013"}\u2013{court.scoreB ?? "\u2013"}
+              </span>{" "}
+              {court.teamB.map((id) => playerName(players, id)).join(" & ")}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EventStandings({ tournament }) {
+  const standings = useMemo(
+    () => computeStandings(tournament.players, tournament.rounds || []),
+    [tournament.players, tournament.rounds]
+  );
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-28">
+      <div className="rally-card overflow-hidden">
+        <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--line)" }}>
+              <th className="text-left py-2.5 px-3 text-xs font-semibold" style={{ color: "var(--slate)" }}>#</th>
+              <th className="text-left py-2.5 px-3 text-xs font-semibold" style={{ color: "var(--slate)" }}>Player</th>
+              <th className="text-right py-2.5 px-3 text-xs font-semibold" style={{ color: "var(--slate)" }}>Pts</th>
+              <th className="text-right py-2.5 px-3 text-xs font-semibold" style={{ color: "var(--slate)" }}>+/-</th>
+              <th className="text-right py-2.5 px-3 text-xs font-semibold" style={{ color: "var(--slate)" }}>W</th>
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((s, i) => (
+              <tr key={s.id} style={{ borderBottom: i < standings.length - 1 ? "1px solid var(--line)" : "none" }}>
+                <td className="py-2.5 px-3 text-xs font-bold rally-tabular" style={{ color: "var(--slate)" }}>{i + 1}</td>
+                <td className="py-2.5 px-3 text-sm font-semibold" style={{ color: "var(--ink)" }}>{s.name}</td>
+                <td className="py-2.5 px-3 text-sm font-bold text-right rally-tabular" style={{ color: "var(--court-blue)" }}>{s.points}</td>
+                <td className="py-2.5 px-3 text-xs text-right rally-tabular" style={{ color: "var(--slate)" }}>{s.diff > 0 ? "+" : ""}{s.diff}</td>
+                <td className="py-2.5 px-3 text-xs text-right rally-tabular" style={{ color: "var(--slate)" }}>{s.wins}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EventFull({ event, eventId }) {
+  const [tournament, setTournament] = useState(null);
+  const [activeTab, setActiveTab] = useState("play");
+  const [expandedIdx, setExpandedIdx] = useState(0);
+  const [, forceRender] = useState(0);
+
+  useEffect(() => {
+    const unsub = watchPadelTournament(eventId, (t) => setTournament(t), () => {});
+    return () => unsub();
+  }, [eventId]);
+
+  if (!tournament) {
+    return (
+      <div className="max-w-xl mx-auto px-4 pb-28 text-center" style={{ color: "var(--slate)" }}>
+        <p className="text-sm mt-8">Everyone's in \u2014 generating the draw now. This usually takes a few seconds.</p>
+      </div>
+    );
+  }
+
+  // Local, optimistic score updates so the input feels instant while
+  // syncPadelScoreField's debounced transaction catches up in the
+  // background — the live listener above will reconcile shortly after.
+  const dispatch = ({ roundIndex, court, field, value }) => {
+    setTournament((prev) => {
+      if (!prev) return prev;
+      const rounds = prev.rounds.map((r, ri) => {
+        if (ri !== roundIndex) return r;
+        return { ...r, courts: r.courts.map((c) => (c.court !== court ? c : { ...c, [field]: value })) };
+      });
+      return { ...prev, rounds };
+    });
+  };
+
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-28">
+      <div className="flex gap-2 mb-5 p-1 rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--line)" }}>
+        <button type="button" onClick={() => setActiveTab("play")}
+          className={"rally-tab-btn flex-1 py-2 text-sm" + (activeTab === "play" ? " active" : "")}>
+          Scores
+        </button>
+        <button type="button" onClick={() => setActiveTab("standings")}
+          className={"rally-tab-btn flex-1 py-2 text-sm" + (activeTab === "standings" ? " active" : "")}>
+          Standings
+        </button>
+      </div>
+
+      {activeTab === "play" ? (
+        tournament.rounds.map((round, idx) => (
+          <EventRoundBlock key={idx} round={round} roundIndex={idx} totalRounds={tournament.rounds.length}
+            players={tournament.players} dispatch={dispatch} expanded={expandedIdx === idx}
+            onToggle={() => setExpandedIdx(expandedIdx === idx ? -1 : idx)}
+            pointsTarget={tournament.pointsTarget} eventId={eventId} />
+        ))
+      ) : (
+        <EventStandings tournament={tournament} />
+      )}
+    </div>
+  );
+}
+
+function EventsList({ events, onSelect }) {
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-6">
+      <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>
+        Your events
+      </div>
+      {events.map((ev) => (
+        <button key={ev.id} type="button" onClick={() => onSelect(ev.id)}
+          className="rally-card w-full text-left p-4 mb-3 block">
+          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>{ev.location}</div>
+          <div className="text-xs mb-2" style={{ color: "var(--slate)" }}>{formatEventWhen(ev)}</div>
+          <span className="rally-chip px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--slate)" }}>
+            {ev.drawGenerated ? "Draw ready" : `${(ev.participants || []).length} / ${ev.capacity} joined`}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function InvitationsSection({ invites, onAccept, onDecline, busyId }) {
+  if (!invites.length) return null;
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-6">
+      <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>
+        Invitations
+      </div>
+      {invites.map((inv) => (
+        <div key={`${inv.eventId}_${inv.id}`} className="rally-card p-4 mb-3">
+          <div className="text-sm mb-3" style={{ color: "var(--ink)" }}>
+            You've been invited to a padel event
+          </div>
+          <div className="flex gap-2">
+            <button type="button" disabled={busyId === inv.eventId} onClick={() => onAccept(inv)}
+              className="rally-btn-primary flex-1 py-2 text-sm">
+              {busyId === inv.eventId ? "\u2026" : "Accept"}
+            </button>
+            <button type="button" disabled={busyId === inv.eventId} onClick={() => onDecline(inv)}
+              className="flex-1 py-2 text-sm rounded-xl font-semibold"
+              style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
+              Decline
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EventsApp() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [uid, setUid] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [myEvents, setMyEvents] = useState([]);
+  const [myInvites, setMyInvites] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [inviteBusyId, setInviteBusyId] = useState(null);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuName, setMenuName] = useState("");
+  const [menuError, setMenuError] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [theme, setThemeState] = useState(() => (
+    document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark"
+  ));
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        location.replace("index.html?nav=1");
+        return;
+      }
+      setUid(user.uid);
+      setAuthChecked(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+    let cancelled = false;
+    getMyProfile(uid).then((p) => {
+      if (cancelled || !p) return;
+      setProfile(p);
+      setMenuName(p.name || "");
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  useEffect(() => {
+    if (!uid || !profile) return;
+    let gotEvents = false;
+    let gotInvites = false;
+    function maybeReady() {
+      if (gotEvents && gotInvites) setLoaded(true);
+    }
+    const unsub1 = watchMyPadelEvents(uid, (evs) => {
+      setMyEvents(evs.sort((a, b) => (a.dateTime.toMillis?.() || 0) - (b.dateTime.toMillis?.() || 0)));
+      gotEvents = true;
+      maybeReady();
+    }, () => { gotEvents = true; maybeReady(); });
+    const unsub2 = watchMyPadelEventInvites(profile.phone, (invs) => {
+      setMyInvites(invs);
+      gotInvites = true;
+      maybeReady();
+    }, () => { gotInvites = true; maybeReady(); });
+    return () => { unsub1(); unsub2(); };
+  }, [uid, profile]);
+
+  function applyTheme(next) {
+    const normalized = next === "light" ? "light" : "dark";
+    if (normalized === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+    try { localStorage.setItem("nextset-theme", normalized); } catch (e) {}
+    setThemeState(normalized);
+  }
+
+  async function handleSaveName() {
+    const name = menuName.trim();
+    if (!name) { setMenuError("Enter a name."); return; }
+    setSavingName(true);
+    setMenuError("");
+    try {
+      await updateMyProfileName(uid, name);
+      setProfile((p) => ({ ...(p || {}), name }));
+    } catch (e) {
+      setMenuError("Could not save \u2014 try again.");
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOutUser();
+    location.replace("index.html?nav=1");
+  }
+
+  async function handleCreate(fields) {
+    setCreating(true);
+    setCreateError("");
+    try {
+      const id = await createPadelEvent(fields, uid, profile.name);
+      setSelectedId(id);
+    } catch (e) {
+      setCreateError(e && e.message ? e.message : "Could not create event.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleAcceptInvite(inv) {
+    setInviteBusyId(inv.eventId);
+    try {
+      await acceptPadelEventInvite(inv.eventId, inv.id, uid, profile.name);
+      setSelectedId(inv.eventId);
+    } catch (e) {
+      // surfaced implicitly: invite stays in the list, they can try again
+    } finally {
+      setInviteBusyId(null);
+    }
+  }
+
+  async function handleDeclineInvite(inv) {
+    setInviteBusyId(inv.eventId);
+    try {
+      await declinePadelEventInvite(inv.eventId, inv.id);
+    } finally {
+      setInviteBusyId(null);
+    }
+  }
+
+  if (!authChecked || !loaded) {
+    return (
+      <div className="rally-root flex items-center justify-center" style={{ minHeight: "60vh" }}>
+        <style>{GLOBAL_STYLES}</style>
+        <div style={{ color: "var(--slate)" }}>Loading\u2026</div>
+      </div>
+    );
+  }
+
+  const selectedEvent = selectedId ? myEvents.find((e) => e.id === selectedId) : null;
+  const isOrganizer = selectedEvent && uid && (selectedEvent.organizers || []).includes(uid);
+
+  return (
+    <div className="rally-root">
+      <style>{GLOBAL_STYLES}</style>
+
+      <div className="max-w-xl mx-auto" style={{ padding: "20px 22px", borderBottom: "1px solid var(--line)" }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-bold uppercase" style={{ color: "var(--slate)", letterSpacing: "0.03em", fontSize: "0.92rem" }}>
+              Court <span className="app-brand-pop">Pop</span>
+            </span>
+            <span className="text-sm font-bold" style={{ color: "var(--slate)" }}>-</span>
+            <span style={{ color: "var(--ink)", fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontStyle: "italic", fontSize: "1.5rem", letterSpacing: "-0.01em" }}>
+              Events
+            </span>
+          </div>
+          <button type="button" onClick={() => setMenuOpen(true)}
+            style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 8, padding: 8, color: "var(--slate)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            aria-label="Settings">
+            <svg viewBox="0 0 20 20" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <circle cx="10" cy="10" r="5" />
+              <circle cx="10" cy="10" r="1.8" />
+              <line x1="15" y1="10" x2="17.3" y2="10" />
+              <line x1="13.54" y1="13.54" x2="15.16" y2="15.16" />
+              <line x1="10" y1="15" x2="10" y2="17.3" />
+              <line x1="6.46" y1="13.54" x2="4.84" y2="15.16" />
+              <line x1="5" y1="10" x2="2.7" y2="10" />
+              <line x1="6.46" y1="6.46" x2="4.84" y2="4.84" />
+              <line x1="10" y1="5" x2="10" y2="2.7" />
+              <line x1="13.54" y1="6.46" x2="15.16" y2="4.84" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {selectedEvent ? (
+        <div className="max-w-xl mx-auto px-4 pt-4">
+          <button type="button" onClick={() => setSelectedId(null)} className="text-xs font-semibold mb-4"
+            style={{ color: "var(--slate)" }}>
+            &larr; All events
+          </button>
+        </div>
+      ) : null}
+
+      {selectedEvent ? (
+        selectedEvent.drawGenerated
+          ? <EventFull event={selectedEvent} eventId={selectedEvent.id} />
+          : <EventNotFull event={selectedEvent} eventId={selectedEvent.id} myUid={uid} isOrganizer={isOrganizer}
+              onInvited={() => {}} />
+      ) : (
+        <div className="pt-5">
+          <InvitationsSection invites={myInvites} onAccept={handleAcceptInvite} onDecline={handleDeclineInvite} busyId={inviteBusyId} />
+
+          {myEvents.length ? <EventsList events={myEvents} onSelect={setSelectedId} /> : null}
+
+          <div className="max-w-xl mx-auto px-4">
+            {myEvents.length ? (
+              <button type="button" onClick={() => setSelectedId("__new__")}
+                className="rally-btn-primary w-full py-3 text-sm mb-6">
+                + Create another event
+              </button>
+            ) : null}
+          </div>
+
+          {!myEvents.length ? (
+            <CreateEventForm onCreate={handleCreate} creating={creating} error={createError} />
+          ) : null}
+        </div>
+      )}
+
+      {selectedId === "__new__" ? (
+        <div style={{ position: "fixed", inset: 0, background: "var(--chalk)", overflowY: "auto", zIndex: 40 }}>
+          <div className="max-w-xl mx-auto px-4 pt-6">
+            <button type="button" onClick={() => setSelectedId(null)} className="text-xs font-semibold mb-4"
+              style={{ color: "var(--slate)" }}>
+              &larr; Cancel
+            </button>
+          </div>
+          <CreateEventForm onCreate={handleCreate} creating={creating} error={createError} />
+        </div>
+      ) : null}
+
+      {menuOpen ? (
+        <MenuModal
+          profile={profile}
+          nameValue={menuName}
+          onNameChange={setMenuName}
+          onSaveName={handleSaveName}
+          savingName={savingName}
+          error={menuError}
+          theme={theme}
+          onThemeChange={applyTheme}
+          onSignOut={handleSignOut}
+          onClose={() => { setMenuOpen(false); setMenuError(""); }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+const eventsRootEl = document.getElementById("root");
+ReactDOM.createRoot(eventsRootEl).render(<EventsApp />);
+if (typeof window !== "undefined") window.__eventsMounted = true;
 </script>
 </body>
 </html>
