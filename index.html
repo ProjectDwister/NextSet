@@ -24,7 +24,7 @@
 <meta name="apple-mobile-web-app-title" content="Court Pop"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
   :root {
     --bg: #0b1020;
@@ -287,10 +287,22 @@
     border-bottom: 1px solid var(--border);
   }
   .app-header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .app-brand-row { display: flex; align-items: baseline; gap: 7px; }
-  .app-brand { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+  .app-brand-row { display: flex; align-items: center; gap: 7px; }
+  .app-brand { font-size: 0.92rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
+  .app-brand-pop {
+    display: inline-block;
+    animation: pop-color-cycle 5s ease-in-out infinite;
+  }
+  @keyframes pop-color-cycle {
+    0%   { color: #e0b23a; opacity: 0.7; }
+    20%  { color: #ff6fb5; opacity: 1; }
+    40%  { color: #78e08f; opacity: 0.85; }
+    60%  { color: #6fa8ff; opacity: 1; }
+    80%  { color: #ff9f5a; opacity: 0.85; }
+    100% { color: #e0b23a; opacity: 0.7; }
+  }
   .app-brand-sep { font-size: 0.9rem; color: var(--muted); }
-  .app-title { font-family: var(--font-display); font-weight: 600; font-size: 1.3rem; letter-spacing: -0.01em; }
+  .app-title { font-family: var(--font-display); font-weight: 500; font-style: italic; font-size: 1.3rem; letter-spacing: -0.01em; }
   .gear-btn {
     width: auto;
     flex-shrink: 0;
@@ -526,7 +538,7 @@
     <header class="app-header">
       <div class="app-header-top">
         <div class="app-brand-row">
-          <span class="app-brand">Court Pop</span>
+          <span class="app-brand">Court <span class="app-brand-pop">Pop</span></span>
           <span class="app-brand-sep">-</span>
           <span class="app-title">Your Games</span>
         </div>
