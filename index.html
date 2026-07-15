@@ -226,6 +226,7 @@
   .game-when { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
   .game-where { color: var(--muted); font-size: 0.87rem; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
   .game-players { color: var(--text); font-size: 0.87rem; margin-top: 14px; display: flex; align-items: center; gap: 8px; }
+  .organizer-name { color: var(--gold); }
   .ic { flex-shrink: 0; opacity: 0.75; }
   .game-when .ic { opacity: 0.55; }
   .game-meta { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
@@ -387,6 +388,7 @@
         <div class="app-user" id="app-user"></div>
       </div>
       <div class="app-header-right">
+        <button id="history-btn" class="btn-sm secondary" type="button">History</button>
         <button id="new-game-btn" class="btn-sm">+ New game</button>
         <button id="sign-out-btn" class="btn-sm secondary" type="button">Sign out</button>
       </div>
@@ -401,19 +403,23 @@
     <main class="app-main">
       <div id="app-error" class="error"></div>
 
-      <div id="invites-section" hidden>
-        <h2 class="section-title">Invitations</h2>
-        <div id="invites-list" class="games-list"></div>
+      <div id="normal-content">
+        <div id="invites-section" hidden>
+          <h2 class="section-title">Invitations</h2>
+          <div id="invites-list" class="games-list"></div>
+        </div>
+
+        <div id="games-empty" class="empty" hidden>No games yet — create your first one.</div>
+
+        <h2 class="section-title">Upcoming</h2>
+        <div id="upcoming-list" class="games-list"></div>
       </div>
 
-      <div id="games-empty" class="empty" hidden>No games yet — create your first one.</div>
-
-      <h2 class="section-title">Upcoming</h2>
-      <div id="upcoming-list" class="games-list"></div>
-
-      <div id="past-section" hidden>
-        <h2 class="section-title muted">Past</h2>
-        <div id="past-list" class="games-list"></div>
+      <div id="history-view" hidden>
+        <button id="history-back-btn" class="btn-sm secondary" type="button">&larr; Back</button>
+        <h2 class="section-title">History</h2>
+        <div id="history-empty" class="empty" hidden>No past games yet.</div>
+        <div id="history-list" class="games-list"></div>
       </div>
     </main>
   </div>
@@ -799,6 +805,18 @@
       }).join('');
     }
 
+    function playersLineHtml(ev) {
+      const entries = Object.entries(ev.participantNames || {}); // [uid, name][]
+      if (!entries.length) return '—';
+      return entries
+        .map(([uid, name]) => (
+          uid === ev.createdBy
+            ? `<span class="organizer-name">${escapeHtml(name)}</span>`
+            : escapeHtml(name)
+        ))
+        .join(', ');
+    }
+
     function gameCardHtml(ev, isPast) {
       const mine = currentUser && ev.createdBy === currentUser.uid;
       const names = Object.values(ev.participantNames || {});
@@ -820,7 +838,7 @@
             ${ev.format ? `<span class="tag gold">${escapeHtml(ev.format)}</span>` : ''}
             <span class="tag${full ? '' : ' warn'}">${count}/4 ${full ? 'full' : 'joined'}</span>
           </div>
-          <div class="game-players">${ICON_PEOPLE}${escapeHtml(names.join(', ') || '—')}</div>
+          <div class="game-players">${ICON_PEOPLE}${playersLineHtml(ev)}</div>
           ${!isPast ? inviteStatusHtml(ev.id) : ''}
           ${ev.notes ? `<div class="game-notes">${escapeHtml(ev.notes)}</div>` : ''}
           ${actions.length ? `<div class="game-actions">${actions.join('')}</div>` : ''}
@@ -860,10 +878,20 @@
       $('upcoming-list').innerHTML = upcoming.length
         ? upcoming.map((e) => gameCardHtml(e, false)).join('')
         : (events.length ? '<div class="empty">Nothing upcoming.</div>' : '');
-      $('past-section').hidden = past.length === 0;
-      $('past-list').innerHTML = past.map((e) => gameCardHtml(e, true)).join('');
+      $('history-empty').hidden = past.length > 0;
+      $('history-list').innerHTML = past.map((e) => gameCardHtml(e, true)).join('');
       attachCardHandlers(events);
     }
+
+    $('history-btn').addEventListener('click', () => {
+      $('normal-content').hidden = true;
+      $('history-view').hidden = false;
+    });
+
+    $('history-back-btn').addEventListener('click', () => {
+      $('history-view').hidden = true;
+      $('normal-content').hidden = false;
+    });
 
     // ---------------- invitations (received) ----------------
     async function renderInvites(invites) {
