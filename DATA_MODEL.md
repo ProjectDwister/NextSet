@@ -98,6 +98,20 @@ its link. If a future version needs per-tournament access control the
 way events do, that's a real change to make deliberately, not a gap to
 quietly close.
 
+## `admins/{phone}`
+
+Read-only visibility into every `padelEvent`, for the app's own owner
+to see what's happening without being a participant or organizer of
+anything — not an acting-on-others'-behalf power, deliberately. A
+document existing at this path (any content, existence is the whole
+signal) marks that phone number as an admin. Locked to `allow read,
+write: if false` — no client code ever touches this collection, it's
+managed by hand in the Firebase console, and other rules only ever
+check it via `exists()`. Keyed by phone rather than uid specifically
+so nothing about a real person needs to live in the *rules file*
+itself, which sits in a public repo — a Firestore document with rules
+this locked down is a much better place for it.
+
 ## `padelEvents/{eventId}`
 
 That "real change, made deliberately" from above — the Events section.
@@ -108,7 +122,7 @@ private, participant-only version of a Rally tournament.
 
 | field              | type            | notes                              |
 |--------------------|-----------------|--------------------------------------|
-| `createdBy`         | uid             |                                      |
+| `createdBy`         | uid             | fixed historical record of who originally created it — not the same as who currently manages it, see `organizers` |
 | `dateTime`          | timestamp       |                                      |
 | `durationMin`       | number          |                                      |
 | `location`          | string          |                                      |
@@ -118,8 +132,9 @@ private, participant-only version of a Rally tournament.
 | `numRounds`         | number          |                                      |
 | `pointsTarget`      | number          |                                      |
 | `notes`             | string, optional |                                     |
-| `participants`      | array of uid    | organizer included from creation, exactly like `events` |
+| `participants`      | array of uid    | people actually playing — added once they accept an invite |
 | `participantNames`  | map uid→name    |                                      |
+| `organizers`         | array of uid    | who can invite, edit, and manage scoring — starts as just `createdBy`, but is reassignable and deliberately independent of `participants`. An organizer doesn't have to be playing, and someone playing isn't automatically an organizer. |
 | `drawGenerated`     | boolean         | flips to true exactly once, the moment `participants.length == capacity` — see the Cloud Function |
 | `reminder24hSentAt` / `reminder12hSentAt` | timestamp, optional | same reminder system as `events`, same Cloud Function, just pointed at this collection too |
 | `createdAt` / `updatedAt` | timestamp |                                |
