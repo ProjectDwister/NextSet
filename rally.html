@@ -1262,6 +1262,14 @@ function FormatCard({ selected, onSelect, icon, title, tagline, points }) {
    ============================================================ */
 
 function SetupScreen({ state, dispatch, onGenerate, syncStatus }) {
+  // Which screen of setup is showing. Local to this device on purpose —
+  // multiple people can be looking at the same shared tournament at
+  // once (one reviewing the format, another adding players), and one
+  // person stepping forward shouldn't yank the screen out from under
+  // someone else. Only the underlying data (format, players, ...) is
+  // actually synced.
+  const [setupStep, setSetupStep] = useState(state.players.length > 0 ? "players" : "format");
+
   const { men, women, other } = useMemo(() => splitByGender(state.players), [state.players]);
   const genderReady = state.mixedMode ? Math.min(men.length, women.length) > 0 : true;
   const enoughPlayers = state.players.length >= 4;
@@ -1281,180 +1289,204 @@ function SetupScreen({ state, dispatch, onGenerate, syncStatus }) {
   const updatePlayer = (id, patch) => dispatch({ type: "UPDATE_PLAYER", id, patch });
   const removePlayer = (id) => dispatch({ type: "REMOVE_PLAYER", id });
 
+  const chooseFormat = (value) => {
+    dispatch({ type: "SET_FORMAT", value });
+    setSetupStep("players");
+  };
+
   return (
     <div className="max-w-xl mx-auto px-4 pb-28 pt-6 sm:pt-10">
       <p className="text-sm mb-2" style={{ color: "var(--slate)" }}>
         Set up a padel Americano or Mexicano, draw the rounds, and keep score from courtside.
       </p>
-      <div className="mb-7">
+      <div className="mb-5">
         <SyncBadge status={syncStatus} />
       </div>
 
-      {/* Format */}
-      <SectionLabel n={1} title="Format" />
-      <div className="grid grid-cols-2 gap-3 mb-7">
-        <FormatCard
-          selected={state.format === "americano"}
-          onSelect={() => dispatch({ type: "SET_FORMAT", value: "americano" })}
-          icon={<Shuffle size={17} />}
-          title="Americano"
-          tagline="Fixed rotation, social & even."
-          points={["Whole schedule set up front", "Everyone partners everyone", "Best for mixed levels"]}
-        />
-        <FormatCard
-          selected={state.format === "mexicano"}
-          onSelect={() => dispatch({ type: "SET_FORMAT", value: "mexicano" })}
-          icon={<TrendingUp size={17} />}
-          title="Mexicano"
-          tagline="Leaderboard picks the next round."
-          points={["Round 1 is random", "Then winners face winners", "Best for competitive nights"]}
-        />
+      <div className="flex items-center gap-1.5 mb-7">
+        <span style={{ width: 20, height: 4, borderRadius: 2, background: "var(--court-blue)" }} />
+        <span style={{ width: 20, height: 4, borderRadius: 2, background: setupStep === "players" ? "var(--court-blue)" : "var(--line)" }} />
       </div>
 
-      {/* Players */}
-      <SectionLabel n={2} title="Players" trailing={`${state.players.length}`} />
-      <div className="rally-card p-3 mb-7">
-        {state.players.length === 0 ? (
-          <div className="text-center py-6 px-4">
-            <Users size={22} className="mx-auto mb-2" style={{ color: "var(--slate-light)" }} />
-            <p className="text-sm font-medium mb-0.5" style={{ color: "var(--ink)" }}>
-              No players yet
-            </p>
-            <p className="text-xs" style={{ color: "var(--slate)" }}>
-              Add players below — you can fill in real names and gender now or later.
-            </p>
+      {setupStep === "format" ? (
+        <React.Fragment>
+          <SectionLabel n={1} title="Format" />
+          <div className="grid grid-cols-2 gap-3 mb-7">
+            <FormatCard
+              selected={state.format === "americano"}
+              onSelect={() => chooseFormat("americano")}
+              icon={<Shuffle size={17} />}
+              title="Americano"
+              tagline="Fixed rotation, social & even."
+              points={["Whole schedule set up front", "Everyone partners everyone", "Best for mixed levels"]}
+            />
+            <FormatCard
+              selected={state.format === "mexicano"}
+              onSelect={() => chooseFormat("mexicano")}
+              icon={<TrendingUp size={17} />}
+              title="Mexicano"
+              tagline="Leaderboard picks the next round."
+              points={["Round 1 is random", "Then winners face winners", "Best for competitive nights"]}
+            />
           </div>
-        ) : (
-          <div className="divide-y max-h-80 overflow-y-auto rally-scroll" style={{ borderColor: "var(--line)" }}>
-            {state.players.map((p, i) => (
-              <PlayerRow key={p.id} player={p} index={i} onUpdate={updatePlayer} onRemove={removePlayer} />
-            ))}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2 mt-3 pt-3" style={{ borderTop: state.players.length ? "1px solid var(--line)" : "none" }}>
+        </React.Fragment>
+      ) : (
+        <React.Fragment>
           <button
             type="button"
-            onClick={() => addBlankPlayers(1)}
-            className="rally-chip px-3 py-1.5 text-xs font-semibold flex items-center gap-1"
-            style={{ color: "var(--ink)" }}
+            onClick={() => setSetupStep("format")}
+            className="text-xs font-semibold mb-5 inline-flex items-center gap-1"
+            style={{ color: "var(--slate)" }}
           >
-            <Plus size={13} /> Add player
+            &larr; {state.format === "americano" ? "Americano" : "Mexicano"} · change format
           </button>
-          <button
-            type="button"
-            onClick={() => addBlankPlayers(4)}
-            className="rally-chip px-3 py-1.5 text-xs font-semibold"
-            style={{ color: "var(--ink)" }}
-          >
-            +4
-          </button>
-          <button
-            type="button"
-            onClick={() => addBlankPlayers(8)}
-            className="rally-chip px-3 py-1.5 text-xs font-semibold"
-            style={{ color: "var(--ink)" }}
-          >
-            +8
-          </button>
-        </div>
-      </div>
-      {!enoughPlayers ? (
-        <InlineNote icon={<Info size={13} />} tone="muted">
-          Add at least 4 players (a multiple of 4 keeps every court full).
-        </InlineNote>
-      ) : null}
 
-      {/* Courts & rounds */}
-      <SectionLabel n={3} title="Courts & rounds" />
-      <div className="rally-card p-4 mb-7 flex items-center justify-between flex-wrap gap-4">
-        <Stepper
-          label="Courts"
-          value={state.numCourts}
-          min={1}
-          max={20}
-          onChange={(v) => dispatch({ type: "SET_COURTS", value: v })}
-        />
-        <Stepper
-          label="Rounds"
-          value={state.numRounds}
-          min={1}
-          max={20}
-          onChange={(v) => dispatch({ type: "SET_ROUNDS", value: v })}
-        />
-        <Stepper
-          label="Points / match"
-          value={state.pointsTarget}
-          min={4}
-          max={48}
-          onChange={(v) => dispatch({ type: "SET_POINTS_TARGET", value: v })}
-        />
-      </div>
-
-      {/* Advanced */}
-      <SectionLabel n={4} title="Options" />
-      <div className="rally-card p-4 mb-7 space-y-4">
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={state.mixedMode}
-            onChange={(e) => dispatch({ type: "SET_MIXED", value: e.target.checked })}
-            className="mt-0.5 w-4 h-4 flex-shrink-0"
-          />
-          <span>
-            <span className="text-sm font-semibold block" style={{ color: "var(--ink)" }}>
-              Mixed doubles
-            </span>
-            <span className="text-xs" style={{ color: "var(--slate)" }}>
-              Every team is one man + one woman. Needs gender set on the players who'll play.
-            </span>
-          </span>
-        </label>
-
-        {state.mixedMode ? (
-          <div className="text-xs rounded-lg p-2.5" style={{ background: "var(--chalk)", color: "var(--slate)" }}>
-            {men.length} men · {women.length} women{other.length ? ` · ${other.length} unspecified` : ""}.{" "}
-            {maxTeamsPossible >= 1
-              ? `${maxTeamsPossible * 2} players can be placed per round; the rest rotate through byes.`
-              : "Set gender (M/F) for at least one man and one woman to use mixed mode."}
-          </div>
-        ) : null}
-
-        {state.format === "mexicano" ? (
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--slate)" }}>
-              Court pairing rule
-            </div>
-            <div className="flex gap-2">
-              <PairingRuleOption
-                selected={state.pairingRule === "balanced"}
-                onClick={() => dispatch({ type: "SET_PAIRING_RULE", value: "balanced" })}
-                title="Balanced"
-                desc="1st + 4th vs 2nd + 3rd"
-              />
-              <PairingRuleOption
-                selected={state.pairingRule === "top-heavy"}
-                onClick={() => dispatch({ type: "SET_PAIRING_RULE", value: "top-heavy" })}
-                title="Top pairs"
-                desc="1st + 2nd vs 3rd + 4th"
-              />
+          {/* Players */}
+          <SectionLabel n={2} title="Players" trailing={`${state.players.length}`} />
+          <div className="rally-card p-3 mb-7">
+            {state.players.length === 0 ? (
+              <div className="text-center py-6 px-4">
+                <Users size={22} className="mx-auto mb-2" style={{ color: "var(--slate-light)" }} />
+                <p className="text-sm font-medium mb-0.5" style={{ color: "var(--ink)" }}>
+                  No players yet
+                </p>
+                <p className="text-xs" style={{ color: "var(--slate)" }}>
+                  Add players below — you can fill in real names and gender now or later.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y max-h-80 overflow-y-auto rally-scroll" style={{ borderColor: "var(--line)" }}>
+                {state.players.map((p, i) => (
+                  <PlayerRow key={p.id} player={p} index={i} onUpdate={updatePlayer} onRemove={removePlayer} />
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2 mt-3 pt-3" style={{ borderTop: state.players.length ? "1px solid var(--line)" : "none" }}>
+              <button
+                type="button"
+                onClick={() => addBlankPlayers(1)}
+                className="rally-chip px-3 py-1.5 text-xs font-semibold flex items-center gap-1"
+                style={{ color: "var(--ink)" }}
+              >
+                <Plus size={13} /> Add player
+              </button>
+              <button
+                type="button"
+                onClick={() => addBlankPlayers(4)}
+                className="rally-chip px-3 py-1.5 text-xs font-semibold"
+                style={{ color: "var(--ink)" }}
+              >
+                +4
+              </button>
+              <button
+                type="button"
+                onClick={() => addBlankPlayers(8)}
+                className="rally-chip px-3 py-1.5 text-xs font-semibold"
+                style={{ color: "var(--ink)" }}
+              >
+                +8
+              </button>
             </div>
           </div>
-        ) : null}
-      </div>
+          {!enoughPlayers ? (
+            <InlineNote icon={<Info size={13} />} tone="muted">
+              Add at least 4 players (a multiple of 4 keeps every court full).
+            </InlineNote>
+          ) : null}
 
-      <button
-        type="button"
-        disabled={!canGenerate}
-        onClick={onGenerate}
-        className="rally-btn-primary w-full py-3.5 flex items-center justify-center gap-2 text-sm"
-      >
-        Generate draw <ArrowRight size={16} />
-      </button>
-      {!canGenerate && enoughPlayers ? (
-        <InlineNote icon={<AlertTriangle size={13} />} tone="warn">
-          Mixed mode needs at least one man and one woman with gender set.
-        </InlineNote>
-      ) : null}
+          {/* Courts & rounds */}
+          <SectionLabel n={3} title="Courts & rounds" />
+          <div className="rally-card p-4 mb-7 flex items-center justify-between flex-wrap gap-4">
+            <Stepper
+              label="Courts"
+              value={state.numCourts}
+              min={1}
+              max={20}
+              onChange={(v) => dispatch({ type: "SET_COURTS", value: v })}
+            />
+            <Stepper
+              label="Rounds"
+              value={state.numRounds}
+              min={1}
+              max={20}
+              onChange={(v) => dispatch({ type: "SET_ROUNDS", value: v })}
+            />
+            <Stepper
+              label="Points / match"
+              value={state.pointsTarget}
+              min={4}
+              max={48}
+              onChange={(v) => dispatch({ type: "SET_POINTS_TARGET", value: v })}
+            />
+          </div>
+
+          {/* Advanced */}
+          <SectionLabel n={4} title="Options" />
+          <div className="rally-card p-4 mb-7 space-y-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={state.mixedMode}
+                onChange={(e) => dispatch({ type: "SET_MIXED", value: e.target.checked })}
+                className="mt-0.5 w-4 h-4 flex-shrink-0"
+              />
+              <span>
+                <span className="text-sm font-semibold block" style={{ color: "var(--ink)" }}>
+                  Mixed doubles
+                </span>
+                <span className="text-xs" style={{ color: "var(--slate)" }}>
+                  Every team is one man + one woman. Needs gender set on the players who'll play.
+                </span>
+              </span>
+            </label>
+
+            {state.mixedMode ? (
+              <div className="text-xs rounded-lg p-2.5" style={{ background: "var(--chalk)", color: "var(--slate)" }}>
+                {men.length} men · {women.length} women{other.length ? ` · ${other.length} unspecified` : ""}.{" "}
+                {maxTeamsPossible >= 1
+                  ? `${maxTeamsPossible * 2} players can be placed per round; the rest rotate through byes.`
+                  : "Set gender (M/F) for at least one man and one woman to use mixed mode."}
+              </div>
+            ) : null}
+
+            {state.format === "mexicano" ? (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--slate)" }}>
+                  Court pairing rule
+                </div>
+                <div className="flex gap-2">
+                  <PairingRuleOption
+                    selected={state.pairingRule === "balanced"}
+                    onClick={() => dispatch({ type: "SET_PAIRING_RULE", value: "balanced" })}
+                    title="Balanced"
+                    desc="1st + 4th vs 2nd + 3rd"
+                  />
+                  <PairingRuleOption
+                    selected={state.pairingRule === "top-heavy"}
+                    onClick={() => dispatch({ type: "SET_PAIRING_RULE", value: "top-heavy" })}
+                    title="Top pairs"
+                    desc="1st + 2nd vs 3rd + 4th"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            disabled={!canGenerate}
+            onClick={onGenerate}
+            className="rally-btn-primary w-full py-3.5 flex items-center justify-center gap-2 text-sm"
+          >
+            Generate draw <ArrowRight size={16} />
+          </button>
+          {!canGenerate && enoughPlayers ? (
+            <InlineNote icon={<AlertTriangle size={13} />} tone="warn">
+              Mixed mode needs at least one man and one woman with gender set.
+            </InlineNote>
+          ) : null}
+        </React.Fragment>
+      )}
     </div>
   );
 }
@@ -1982,7 +2014,7 @@ function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, e
     >
       <div className="rally-card w-full max-w-sm p-5 rally-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="text-base font-bold mb-4" style={{ color: "var(--ink)" }}>
-          Court Pop
+          Menu
         </div>
 
         {error ? (
@@ -2050,13 +2082,27 @@ function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, e
 
         <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
 
+        <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--slate)" }}>
+          History
+        </label>
         <a
           href="index.html?nav=1&view=history"
           className="w-full py-2.5 rounded-xl text-sm font-semibold mb-2 flex items-center justify-center"
           style={{ border: "1.5px solid var(--line)", color: "var(--ink)", textDecoration: "none" }}
         >
-          History
+          Your Games History
         </a>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-2"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}
+        >
+          Formats History
+        </button>
+
+        <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
+
         <button
           type="button"
           onClick={onSignOut}
@@ -2278,31 +2324,57 @@ function RallyApp() {
       <style>{GLOBAL_STYLES}</style>
 
       <div className="max-w-xl mx-auto px-4 pt-3 flex flex-col gap-3">
-        <div className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
-          Formats
-        </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className="text-xs font-bold uppercase"
+              style={{ color: "var(--slate)", letterSpacing: "0.04em" }}
+            >
+              Court Pop
+            </span>
+            <span className="text-sm font-bold" style={{ color: "var(--slate)" }}>
+              -
+            </span>
+            <span className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
+              Formats
+            </span>
+          </div>
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg"
+            className="w-9 h-9 flex items-center justify-center rounded-lg flex-shrink-0"
             style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--slate)" }}
-            aria-label="Menu"
+            aria-label="Settings"
           >
-            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M3 6h14M3 10h14M3 14h14" />
+            <svg viewBox="0 0 20 20" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <circle cx="10" cy="10" r="5" />
+              <circle cx="10" cy="10" r="1.8" />
+              <line x1="15" y1="10" x2="17.3" y2="10" />
+              <line x1="13.54" y1="13.54" x2="15.16" y2="15.16" />
+              <line x1="10" y1="15" x2="10" y2="17.3" />
+              <line x1="6.46" y1="13.54" x2="4.84" y2="15.16" />
+              <line x1="5" y1="10" x2="2.7" y2="10" />
+              <line x1="6.46" y1="6.46" x2="4.84" y2="4.84" />
+              <line x1="10" y1="5" x2="10" y2="2.7" />
+              <line x1="13.54" y1="6.46" x2="15.16" y2="4.84" />
             </svg>
           </button>
+        </div>
+        <div className="flex items-center gap-2">
           <a
             href="index.html?nav=1"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
+            className="inline-flex items-center justify-center"
             style={{
               color: "var(--court-blue-ink)",
               background: "var(--court-blue)",
               textDecoration: "none",
+              padding: "9px 16px",
+              borderRadius: 10,
+              fontWeight: 600,
+              fontSize: "0.85rem",
             }}
           >
-            &larr; Your Games
+            Your Games
           </a>
         </div>
       </div>

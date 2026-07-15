@@ -145,6 +145,21 @@
     margin-top: 10px;
     font-weight: 500;
   }
+  a.modal-link-btn {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    margin-top: 10px;
+    font-weight: 500;
+    padding: 13px 14px;
+    border-radius: 12px;
+    font-size: 0.96rem;
+    text-align: center;
+    text-decoration: none;
+  }
   button.secondary:not(:disabled):hover { filter: none; background: rgba(255, 255, 255, 0.04); }
   a.btn-sm.secondary {
     background: transparent;
@@ -271,14 +286,15 @@
     padding: 20px 22px;
     border-bottom: 1px solid var(--border);
   }
+  .app-header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .app-brand-row { display: flex; align-items: baseline; gap: 7px; }
   .app-brand { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
   .app-brand-sep { font-size: 0.9rem; color: var(--muted); }
   .app-title { font-family: var(--font-display); font-weight: 600; font-size: 1.3rem; letter-spacing: -0.01em; }
-  .menu-btn {
+  .gear-btn {
     width: auto;
-    padding: 6px;
-    margin-top: 4px;
+    flex-shrink: 0;
+    padding: 8px;
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -287,7 +303,7 @@
     align-items: center;
     justify-content: center;
   }
-  .menu-btn:hover { background: rgba(255, 255, 255, 0.04); }
+  .gear-btn:hover { background: rgba(255, 255, 255, 0.04); }
   .app-header-right { display: flex; gap: 8px; }
   .btn-sm { width: auto; padding: 9px 16px; font-size: 0.85rem; border-radius: 10px; margin: 0; }
   .app-main { max-width: 720px; margin: 0 auto; padding: 24px 20px; }
@@ -508,11 +524,28 @@
   <!-- ===== the app itself ===== -->
   <div class="view" id="view-app">
     <header class="app-header">
-      <div class="app-title">Your Games</div>
-      <div class="app-header-right">
-        <button id="menu-btn" class="menu-btn" type="button" aria-label="Menu">
-          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+      <div class="app-header-top">
+        <div class="app-brand-row">
+          <span class="app-brand">Court Pop</span>
+          <span class="app-brand-sep">-</span>
+          <span class="app-title">Your Games</span>
+        </div>
+        <button id="menu-btn" class="gear-btn" type="button" aria-label="Settings">
+          <svg viewBox="0 0 20 20" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <circle cx="10" cy="10" r="5" />
+            <circle cx="10" cy="10" r="1.8" />
+            <line x1="15" y1="10" x2="17.3" y2="10" />
+            <line x1="13.54" y1="13.54" x2="15.16" y2="15.16" />
+            <line x1="10" y1="15" x2="10" y2="17.3" />
+            <line x1="6.46" y1="13.54" x2="4.84" y2="15.16" />
+            <line x1="5" y1="10" x2="2.7" y2="10" />
+            <line x1="6.46" y1="6.46" x2="4.84" y2="4.84" />
+            <line x1="10" y1="5" x2="10" y2="2.7" />
+            <line x1="13.54" y1="6.46" x2="15.16" y2="4.84" />
+          </svg>
         </button>
+      </div>
+      <div class="app-header-right">
         <a href="rally.html?nav=1" class="btn-sm" id="rally-link">Formats</a>
         <button id="new-game-btn" class="btn-sm">+ New game</button>
       </div>
@@ -612,7 +645,7 @@
   <!-- ===== menu modal ===== -->
   <div class="modal-backdrop" id="menu-modal-backdrop">
     <div class="modal">
-      <h2>Court Pop</h2>
+      <h2>Menu</h2>
 
       <div id="menu-error" class="error"></div>
 
@@ -633,7 +666,12 @@
 
       <div class="menu-divider"></div>
 
-      <button id="menu-history-btn" class="secondary" type="button">History</button>
+      <label>History</label>
+      <button id="menu-history-games-btn" class="secondary" type="button">Your Games History</button>
+      <a href="rally.html?nav=1" class="modal-link-btn">Formats History</a>
+
+      <div class="menu-divider"></div>
+
       <button id="menu-signout-btn" class="secondary" type="button">Sign out</button>
       <button id="menu-close-btn" class="secondary" type="button">Close</button>
     </div>
@@ -1076,7 +1114,7 @@
       $('menu-modal-backdrop').classList.remove('active');
     }
 
-    $('menu-history-btn').addEventListener('click', showHistory);
+    $('menu-history-games-btn').addEventListener('click', showHistory);
 
     $('history-back-btn').addEventListener('click', () => {
       $('history-view').hidden = true;
