@@ -6,7 +6,7 @@
 <title>NextSet</title>
 <link rel="manifest" href="./manifest.json"/>
 <link rel="icon" href="./icons/icon-192.png"/>
-<link rel="apple-touch-icon" href="./icons/icon-192.png"/>
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png"/>
 <meta name="theme-color" content="#0b1020"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -82,6 +82,17 @@
     font-weight: 500;
   }
   button.secondary:not(:disabled):hover { filter: none; background: rgba(255, 255, 255, 0.04); }
+  a.btn-sm.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  a.btn-sm.secondary:hover { background: rgba(255, 255, 255, 0.04); }
   button.danger { color: #ffb4b4; border-color: rgba(255, 120, 120, 0.3); }
   .error {
     background: var(--warn-bg);
@@ -328,6 +339,21 @@
 </head>
 <body>
 
+  <script>
+    // If Rally was the last section open, jump straight back to it on a
+    // fresh launch (e.g. tapping the home-screen icon) — but never
+    // override an explicit navigation click, which is how both this
+    // page and rally.html always link to each other (?nav=1).
+    (function () {
+      var params = new URLSearchParams(location.search);
+      if (!params.has('nav') && localStorage.getItem('nextset-last-section') === 'rally') {
+        location.replace('rally.html');
+        return;
+      }
+      try { localStorage.setItem('nextset-last-section', 'main'); } catch (e) {}
+    })();
+  </script>
+
   <div id="install-banner" class="install-banner">
     <span id="install-banner-text"></span>
     <div class="install-banner-actions">
@@ -388,6 +414,7 @@
         <div class="app-user" id="app-user"></div>
       </div>
       <div class="app-header-right">
+        <a href="rally.html?nav=1" class="btn-sm secondary" id="rally-link">Rally</a>
         <button id="history-btn" class="btn-sm secondary" type="button">History</button>
         <button id="new-game-btn" class="btn-sm">+ New game</button>
         <button id="sign-out-btn" class="btn-sm secondary" type="button">Sign out</button>

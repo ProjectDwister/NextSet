@@ -1,0 +1,2125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+<title>Rally — Padel Tournament Scorer</title>
+<meta name="description" content="Run a padel Americano or Mexicano tournament: build the draw, keep score courtside, track the leaderboard." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='8' fill='%230F3D8C'/%3E%3Cpath d='M9 16 H23' stroke='%23FFFFFF' stroke-width='2' stroke-dasharray='2.5 2.5' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='9.5' r='3.4' fill='%23B8922B'/%3E%3Ccircle cx='16' cy='22.5' r='3.4' fill='%23FFFFFF'/%3E%3C/svg%3E" />
+
+<!-- No manifest/theme-color/apple-touch-icon here on purpose: this page
+     is now part of NextSet's single install identity (see index.html's
+     manifest.json), not a second, competing installable app. -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+
+<style>*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.19 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.static{position:static}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.inset-0{inset:0}.top-0{top:0}.z-10{z-index:10}.z-50{z-index:50}.mx-auto{margin-left:auto;margin-right:auto}.my-3{margin-top:.75rem;margin-bottom:.75rem}.-mt-4{margin-top:-1rem}.mb-0{margin-bottom:0}.mb-0\.5{margin-bottom:.125rem}.mb-1{margin-bottom:.25rem}.mb-1\.5{margin-bottom:.375rem}.mb-2{margin-bottom:.5rem}.mb-2\.5{margin-bottom:.625rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-7{margin-bottom:1.75rem}.ml-1{margin-left:.25rem}.mt-0{margin-top:0}.mt-0\.5{margin-top:.125rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.block{display:block}.inline-block{display:inline-block}.inline{display:inline}.flex{display:flex}.table{display:table}.grid{display:grid}.hidden{display:none}.h-4{height:1rem}.h-5{height:1.25rem}.h-7{height:1.75rem}.h-8{height:2rem}.h-9{height:2.25rem}.max-h-80{max-height:20rem}.w-10{width:2.5rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-6{width:1.5rem}.w-7{width:1.75rem}.w-8{width:2rem}.w-9{width:2.25rem}.w-full{width:100%}.min-w-0{min-width:0}.max-w-sm{max-width:24rem}.max-w-xl{max-width:36rem}.flex-1{flex:1 1 0%}.flex-shrink-0{flex-shrink:0}.transform{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.cursor-pointer{cursor:pointer}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.flex-wrap{flex-wrap:wrap}.items-start{align-items:flex-start}.items-end{align-items:flex-end}.items-center{align-items:center}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-0{gap:0}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-2\.5{gap:.625rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.space-y-0>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0px*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0px*var(--tw-space-y-reverse))}.space-y-0\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.125rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.125rem*var(--tw-space-y-reverse))}.space-y-4>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(1rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(1rem*var(--tw-space-y-reverse))}.divide-y>:not([hidden])~:not([hidden]){--tw-divide-y-reverse:0;border-top-width:calc(1px*(1 - var(--tw-divide-y-reverse)));border-bottom-width:calc(1px*var(--tw-divide-y-reverse))}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.p-2{padding:.5rem}.p-2\.5{padding:.625rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.py-0{padding-top:0;padding-bottom:0}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-3\.5{padding-top:.875rem;padding-bottom:.875rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.pb-1{padding-bottom:.25rem}.pb-28{padding-bottom:7rem}.pt-3{padding-top:.75rem}.pt-4{padding-top:1rem}.pt-6{padding-top:1.5rem}.text-left{text-align:left}.text-center{text-align:center}.text-right{text-align:right}.align-middle{vertical-align:middle}.text-2xl{font-size:1.5rem;line-height:2rem}.text-3xl{font-size:1.875rem;line-height:2.25rem}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xl{font-size:1.25rem;line-height:1.75rem}.text-xs{font-size:.75rem;line-height:1rem}.font-black{font-weight:900}.font-bold{font-weight:700}.font-medium{font-weight:500}.font-semibold{font-weight:600}.uppercase{text-transform:uppercase}.capitalize{text-transform:capitalize}.leading-snug{line-height:1.375}.tracking-wider{letter-spacing:.05em}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.outline{outline-style:solid}.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}@media (min-width:640px){.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.sm\:items-center{align-items:center}.sm\:pt-10{padding-top:2.5rem}}</style>
+
+<style>
+  #rally-boot-status { font-family: -apple-system, system-ui, sans-serif; max-width: 480px; margin: 48px auto; padding: 0 20px; color: #444; text-align: center; }
+  #rally-boot-status .err { color: #b3261e; font-size: 13px; white-space: pre-wrap; text-align: left; background: #fdecea; border-radius: 8px; padding: 12px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="rally-boot-status">
+    <div style="font-weight:700; font-size:16px;">Loading Rally…</div>
+    <div style="font-size:13px; color:#888; margin-top:6px;">
+      Loads React and Babel from a CDN, so this page needs an internet
+      connection the first time. If this message doesn't go away, see the
+      error below, or try opening this file directly in a full browser tab
+      rather than an embedded preview.
+    </div>
+    <div id="rally-boot-errors"></div>
+  </div>
+</div>
+<noscript>This page needs JavaScript enabled to run.</noscript>
+
+<script>
+  window.__rallyMounted = false;
+  function rallyReportError(label) {
+    var box = document.getElementById("rally-boot-errors");
+    if (!box || window.__rallyMounted) return;
+    var line = document.createElement("div");
+    line.className = "err";
+    line.textContent = label;
+    box.appendChild(line);
+  }
+  window.addEventListener("error", function (e) {
+    if (window.__rallyMounted) return;
+    var msg = e && e.message ? e.message : "Unknown script error";
+    var src = e && e.filename ? " (" + e.filename.split("/").pop() + ")" : "";
+    rallyReportError("Script error: " + msg + src);
+  });
+  // No service worker registration here on purpose — NextSet's own
+  // sw.js, registered from index.html, already covers this whole site.
+  // Registering a second one from this page would just be two service
+  // workers competing over an overlapping scope.
+  try { localStorage.setItem('nextset-last-section', 'rally'); } catch (e) {}
+</script>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onerror="rallyReportError('Failed to load React from unpkg.com - check your internet connection or try again.')"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onerror="rallyReportError('Failed to load ReactDOM from unpkg.com - check your internet connection or try again.')"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js" onerror="rallyReportError('Failed to load Babel from unpkg.com - check your internet connection or try again.')"></script>
+
+<script type="text/babel" data-presets="react" data-type="module">
+/* ============================================================
+   LIVE SYNC — Firestore, gated by NextSet's own sign-in. Reuses
+   the exact same Firebase project as the rest of the app (see
+   firebase-config.js) instead of a separate setup, and requires
+   a signed-in NextSet user before anything loads — no local-only
+   fallback anymore, since being signed out now just means "go
+   sign in on the main page first."
+   ============================================================ */
+
+import { auth, db } from './firebase-config.js';
+import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js';
+import {
+  collection, doc, setDoc, onSnapshot, serverTimestamp, runTransaction,
+} from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js';
+
+const { useEffect, useMemo, useReducer, useRef, useState } = React;
+
+function getTournamentIdFromUrl() {
+  return new URLSearchParams(location.search).get('t');
+}
+
+// A tournament is created the moment one is needed and none is in the
+// URL yet — its id is pushed into the URL immediately after, so copying
+// the link from that point on always points back at this same, live
+// tournament for any other signed-in NextSet user who opens it.
+async function ensureTournamentId(uid) {
+  const existing = getTournamentIdFromUrl();
+  if (existing) return existing;
+  const ref = doc(collection(db, 'tournaments'));
+  await setDoc(ref, {
+    ...initialState,
+    createdBy: uid,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  const url = new URL(location.href);
+  url.searchParams.set('t', ref.id);
+  history.replaceState(null, '', url);
+  return ref.id;
+}
+
+// Concurrent score entry (two different courts, same moment) is the one
+// case multiple courtside phones are likely to actually collide on.
+// Firestore can't address into an array by position the way Realtime
+// Database's path-based updates could (rounds/courts are arrays, and
+// Firestore's dot-notation updates only work into maps) — this uses a
+// transaction instead, for the same correctness guarantee (nobody's
+// score edit gets silently lost), just as a read-modify-write rather
+// than a single targeted field path.
+const scoreSyncTimers = {};
+function syncScoreFieldToFirestore(tournamentId, roundIdx, courtNumber, field, value) {
+  if (!tournamentId) return;
+  const key = roundIdx + ":" + courtNumber + ":" + field;
+  if (scoreSyncTimers[key]) clearTimeout(scoreSyncTimers[key]);
+  scoreSyncTimers[key] = setTimeout(async () => {
+    try {
+      const ref = doc(db, 'tournaments', tournamentId);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const rounds = (data.rounds || []).map((r, ri) => {
+          if (ri !== roundIdx) return r;
+          return {
+            ...r,
+            courts: (r.courts || []).map((c) => (c.court !== courtNumber ? c : { ...c, [field]: value })),
+          };
+        });
+        tx.update(ref, { rounds, updatedAt: serverTimestamp() });
+      });
+    } catch (e) {
+      // Non-fatal — the debounced whole-state save (below) or this
+      // field's next edit reconciles it. Locally, the score already
+      // reflects the change either way, since the reducer ran
+      // synchronously on click, independent of this sync call.
+    }
+  }, 150);
+}
+
+
+/* ------------------------------------------------------------
+   Minimal inline icon set (replaces lucide-react for a
+   dependency-free static build — same names/usage as before)
+   ------------------------------------------------------------ */
+
+function Icon({ children, size = 16, color = "currentColor", strokeWidth = 2, style, className }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={style}
+      className={className}
+    >
+      {children}
+    </svg>
+  );
+}
+const Plus = (p) => (
+  <Icon {...p}>
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </Icon>
+);
+const Minus = (p) => (
+  <Icon {...p}>
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </Icon>
+);
+const X = (p) => (
+  <Icon {...p}>
+    <line x1="6" y1="6" x2="18" y2="18" />
+    <line x1="18" y1="6" x2="6" y2="18" />
+  </Icon>
+);
+const Check = (p) => (
+  <Icon {...p}>
+    <polyline points="5 13 10 18 19 7" />
+  </Icon>
+);
+const ChevronDown = (p) => (
+  <Icon {...p}>
+    <polyline points="6 9 12 15 18 9" />
+  </Icon>
+);
+const ChevronUp = (p) => (
+  <Icon {...p}>
+    <polyline points="18 15 12 9 6 15" />
+  </Icon>
+);
+const ArrowRight = (p) => (
+  <Icon {...p}>
+    <line x1="4" y1="12" x2="18" y2="12" />
+    <polyline points="12 6 18 12 12 18" />
+  </Icon>
+);
+const Info = (p) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <line x1="12" y1="11" x2="12" y2="16" />
+    <circle cx="12" cy="7.5" r="0.6" fill={p.color || "currentColor"} stroke="none" />
+  </Icon>
+);
+const AlertTriangle = (p) => (
+  <Icon {...p}>
+    <path d="M12 4 L21 20 L3 20 Z" />
+    <line x1="12" y1="10" x2="12" y2="14.5" />
+    <circle cx="12" cy="17" r="0.6" fill={p.color || "currentColor"} stroke="none" />
+  </Icon>
+);
+const Users = (p) => (
+  <Icon {...p}>
+    <circle cx="9" cy="8" r="3" />
+    <path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6" />
+    <circle cx="17" cy="9" r="2.4" />
+    <path d="M15.2 14.3c2.6.4 4.3 2.6 4.3 5.7" />
+  </Icon>
+);
+const Trophy = (p) => (
+  <Icon {...p}>
+    <path d="M7 4h10v5a5 5 0 0 1-10 0V4z" />
+    <path d="M7 6H4.5A2.5 2.5 0 0 0 7 10" />
+    <path d="M17 6h2.5A2.5 2.5 0 0 1 17 10" />
+    <line x1="12" y1="14" x2="12" y2="17" />
+    <line x1="8" y1="20" x2="16" y2="20" />
+    <line x1="9" y1="17" x2="15" y2="17" />
+  </Icon>
+);
+const Crown = (p) => (
+  <Icon {...p}>
+    <path d="M4 18h16" />
+    <path d="M4 18l-1-9 5 4 4-6 4 6 5-4-1 9z" />
+  </Icon>
+);
+const Coffee = (p) => (
+  <Icon {...p}>
+    <path d="M5 9h13v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V9z" />
+    <path d="M18 10h1.5a2 2 0 0 1 0 4H18" />
+    <path d="M8 3c0 1-1 1-1 2" />
+    <path d="M12 3c0 1-1 1-1 2" />
+  </Icon>
+);
+const RotateCcw = (p) => (
+  <Icon {...p}>
+    <path d="M4 9a8 8 0 1 1 1.5 6.5" />
+    <polyline points="4 4 4 9 9 9" />
+  </Icon>
+);
+const Shuffle = (p) => (
+  <Icon {...p}>
+    <path d="M3 6h4l7 12h4" />
+    <path d="M3 18h4l1.5-2.5" />
+    <path d="M13.5 8.5L15 6h4" />
+    <polyline points="17 4 21 6 17 8" />
+    <polyline points="17 16 21 18 17 20" />
+  </Icon>
+);
+const TrendingUp = (p) => (
+  <Icon {...p}>
+    <polyline points="3 17 9 11 13 15 21 6" />
+    <polyline points="15 6 21 6 21 12" />
+  </Icon>
+);
+const Loader2 = (p) => (
+  <Icon {...p}>
+    <path d="M21 12a9 9 0 1 1-9-9" />
+  </Icon>
+);
+
+/* ============================================================
+   STYLE
+   ============================================================ */
+
+const GLOBAL_STYLES = `
+.rally-root {
+  --ink: #0B1220;
+  --court-blue: #0F3D8C;
+  --court-blue-deep: #071F4D;
+  --court-blue-mid: #1B4FA0;
+  --court-blue-light: #EEF2FA;
+  --chalk: #F6F5F1;
+  --card: #FFFFFF;
+  --ball: #B8922B;
+  --ball-dark: #7A5E1A;
+  --ball-light: #F7F0DC;
+  --slate: #555F78;
+  --slate-light: #97A0B5;
+  --line: rgba(11,18,32,0.10);
+  --line-strong: rgba(11,18,32,0.16);
+  --danger: #A3352B;
+  --danger-light: #FBECEA;
+  --shadow-sm: 0 1px 2px rgba(11,18,32,.05), 0 1px 1px rgba(11,18,32,.03);
+  --shadow-md: 0 10px 26px -8px rgba(11,18,32,.14), 0 2px 6px rgba(11,18,32,.05);
+  --shadow-lg: 0 24px 56px -16px rgba(11,18,32,.24), 0 4px 12px rgba(11,18,32,.08);
+  font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+  background: var(--chalk);
+  background-image:
+    radial-gradient(1200px 480px at 50% -120px, rgba(15,61,140,0.05), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  color: var(--ink);
+  min-height: 100vh;
+  width: 100%;
+}
+
+.rally-root * { box-sizing: border-box; }
+
+.rally-display {
+  font-family: 'Archivo Black', Impact, 'Archivo', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.rally-tabular { font-variant-numeric: tabular-nums; }
+
+.rally-root button { font-family: inherit; cursor: pointer; }
+.rally-root input { font-family: inherit; }
+
+.rally-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+.rally-scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+
+.rally-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.rally-court-card {
+  background: linear-gradient(160deg, var(--court-blue-mid) 0%, var(--court-blue) 45%, var(--court-blue-deep) 100%);
+  border-radius: 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.rally-court-card::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 1.5px solid rgba(255,255,255,0.16);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.rally-court-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 65% at 12% -15%, rgba(255,255,255,0.18), transparent 60%);
+  pointer-events: none;
+}
+
+.rally-net-line {
+  position: relative;
+  height: 0;
+  border-top: 2px dashed rgba(255,255,255,0.45);
+  margin: 2px 22px;
+}
+.rally-net-line::before,
+.rally-net-line::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.8);
+}
+.rally-net-line::before { left: -4px; }
+.rally-net-line::after { right: -4px; }
+
+.rally-court-card .rally-score-input {
+  width: 4.5rem;
+  text-align: center;
+  font-family: 'Archivo Black', Impact, sans-serif;
+  font-size: 1.75rem;
+  color: #FFFFFF;
+  background: rgba(0,0,0,0.16);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  padding: 0.35rem 0.25rem;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.22), inset 0 -1px 0 rgba(255,255,255,0.05);
+  -moz-appearance: textfield;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.rally-score-input::-webkit-outer-spin-button,
+.rally-score-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.rally-score-input::placeholder { color: rgba(255,255,255,0.4); }
+.rally-court-card .rally-score-input:focus {
+  outline: none;
+  border-color: var(--ball);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.22), 0 0 0 3px rgba(184,146,43,0.3);
+}
+
+.rally-winner-glow {
+  color: var(--ball) !important;
+  transition: color 0.3s ease;
+}
+
+.rally-format-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  text-align: left;
+  position: relative;
+}
+.rally-format-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); }
+.rally-format-card.selected {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+}
+.rally-format-card.selected::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 18px; right: 18px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, var(--court-blue), var(--ball));
+}
+
+.rally-btn-primary {
+  background: var(--ink);
+  color: #FFFFFF;
+  border-radius: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-md);
+  transition: background 0.2s ease, transform 0.08s ease, box-shadow 0.2s ease;
+}
+.rally-btn-primary:hover:not(:disabled) { background: var(--court-blue-deep); box-shadow: var(--shadow-lg); }
+.rally-btn-primary:active:not(:disabled) { transform: scale(0.985); }
+.rally-btn-primary:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+
+.rally-chip {
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.rally-tab-btn {
+  border-radius: 12px;
+  font-weight: 600;
+  color: var(--slate);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.rally-tab-btn.active {
+  background: var(--ink);
+  color: #FFFFFF;
+  box-shadow: var(--shadow-sm);
+}
+
+.rally-stepper-btn {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.rally-stepper-btn:hover:not(:disabled) { border-color: var(--court-blue); background: var(--chalk); }
+.rally-stepper-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.rally-fade-in { animation: rallyFadeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes rallyFadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rally-spin { animation: rallySpin 0.9s linear infinite; }
+@keyframes rallySpin { to { transform: rotate(360deg); } }
+
+.rally-root :focus-visible {
+  outline: 2px solid var(--court-blue);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rally-root * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+`;
+
+/* ============================================================
+   SCHEDULING ENGINE
+   (Pure functions, no framework dependencies. Tested standalone
+   before being wired into the UI below.)
+   ============================================================ */
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function pairKey(a, b) {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function buildHistory(players, rounds) {
+  const partnerCount = {};
+  const opponentCount = {};
+  const gamesPlayed = {};
+  const sitOutCount = {};
+  players.forEach((p) => {
+    gamesPlayed[p.id] = 0;
+    sitOutCount[p.id] = 0;
+  });
+
+  rounds.forEach((round) => {
+    round.courts.forEach((court) => {
+      const [a1, a2] = court.teamA;
+      const [b1, b2] = court.teamB;
+      [a1, a2, b1, b2].forEach((id) => {
+        gamesPlayed[id] = (gamesPlayed[id] || 0) + 1;
+      });
+      const pk1 = pairKey(a1, a2);
+      partnerCount[pk1] = (partnerCount[pk1] || 0) + 1;
+      const pk2 = pairKey(b1, b2);
+      partnerCount[pk2] = (partnerCount[pk2] || 0) + 1;
+      [a1, a2].forEach((x) =>
+        [b1, b2].forEach((y) => {
+          const ok = pairKey(x, y);
+          opponentCount[ok] = (opponentCount[ok] || 0) + 1;
+        })
+      );
+    });
+    (round.sittingOut || []).forEach((id) => {
+      sitOutCount[id] = (sitOutCount[id] || 0) + 1;
+    });
+  });
+
+  return { partnerCount, opponentCount, gamesPlayed, sitOutCount };
+}
+
+function computeActiveCount(numPlayers, numCourts) {
+  const maxSlots = numCourts * 4;
+  return Math.floor(Math.min(numPlayers, maxSlots) / 4) * 4;
+}
+
+function chooseSitOuts(players, history, numSitOut) {
+  if (numSitOut <= 0) return [];
+  const sorted = [...players].sort((a, b) => {
+    const soDiff = (history.sitOutCount[a.id] || 0) - (history.sitOutCount[b.id] || 0);
+    if (soDiff !== 0) return soDiff;
+    const gpDiff = (history.gamesPlayed[b.id] || 0) - (history.gamesPlayed[a.id] || 0);
+    if (gpDiff !== 0) return gpDiff;
+    return Math.random() - 0.5;
+  });
+  return sorted.slice(0, numSitOut);
+}
+
+function pairHistoryScore(idA, idB, history, partnerWeight, opponentWeight) {
+  const pk = pairKey(idA, idB);
+  return (history.partnerCount[pk] || 0) * partnerWeight + (history.opponentCount[pk] || 0) * opponentWeight;
+}
+
+function splitByGender(players) {
+  return {
+    men: players.filter((p) => p.gender === "M"),
+    women: players.filter((p) => p.gender === "F"),
+    other: players.filter((p) => p.gender !== "M" && p.gender !== "F"),
+  };
+}
+
+function selectActiveForRound(players, numCourts, history, mixedMode) {
+  if (!mixedMode) {
+    const activeCount = computeActiveCount(players.length, numCourts);
+    const numSitOut = players.length - activeCount;
+    const sittingOut = chooseSitOuts(players, history, numSitOut);
+    const sitOutIds = new Set(sittingOut.map((p) => p.id));
+    return { active: players.filter((p) => !sitOutIds.has(p.id)), sittingOut };
+  }
+
+  const { men, women, other } = splitByGender(players);
+  const maxTeamsByCourts = numCourts * 2;
+  let targetTeams = Math.min(men.length, women.length, maxTeamsByCourts);
+  targetTeams -= targetTeams % 2;
+  targetTeams = Math.max(0, targetTeams);
+
+  const sitOutMen = chooseSitOuts(men, history, men.length - targetTeams);
+  const sitOutWomen = chooseSitOuts(women, history, women.length - targetTeams);
+  const sittingOut = [...sitOutMen, ...sitOutWomen, ...other];
+  const sitOutIds = new Set(sittingOut.map((p) => p.id));
+  const active = players.filter((p) => !sitOutIds.has(p.id));
+  return { active, sittingOut, targetTeams };
+}
+
+function groupConflictScore(group, history) {
+  let score = 0;
+  for (let i = 0; i < group.length; i++) {
+    for (let j = i + 1; j < group.length; j++) {
+      score += pairHistoryScore(group[i].id, group[j].id, history, 2, 1);
+    }
+  }
+  return score;
+}
+
+function groupIntoFoursomes(activePlayers, history, attempts = 80) {
+  let best = null;
+  let bestScore = Infinity;
+
+  for (let a = 0; a < attempts; a++) {
+    const pool = shuffle(activePlayers);
+    const groups = [];
+    while (pool.length > 0) {
+      const group = [pool.shift()];
+      while (group.length < 4 && pool.length > 0) {
+        let bestIdx = 0;
+        let bestConflict = Infinity;
+        for (let i = 0; i < pool.length; i++) {
+          let c = 0;
+          for (const g of group) {
+            c += pairHistoryScore(g.id, pool[i].id, history, 2, 1);
+          }
+          if (c < bestConflict) {
+            bestConflict = c;
+            bestIdx = i;
+          }
+        }
+        group.push(pool.splice(bestIdx, 1)[0]);
+      }
+      groups.push(group);
+    }
+    const totalScore = groups.reduce((sum, g) => sum + groupConflictScore(g, history), 0);
+    if (totalScore < bestScore) {
+      bestScore = totalScore;
+      best = groups;
+    }
+  }
+  return best;
+}
+
+function bestTeamSplit(group, history) {
+  const [w, x, y, z] = group;
+  const splits = [
+    { teamA: [w, x], teamB: [y, z] },
+    { teamA: [w, y], teamB: [x, z] },
+    { teamA: [w, z], teamB: [x, y] },
+  ];
+
+  const scored = splits.map((s) => {
+    const partnerScore =
+      pairHistoryScore(s.teamA[0].id, s.teamA[1].id, history, 1, 0) +
+      pairHistoryScore(s.teamB[0].id, s.teamB[1].id, history, 1, 0);
+    const opponentScore =
+      pairHistoryScore(s.teamA[0].id, s.teamB[0].id, history, 0, 1) +
+      pairHistoryScore(s.teamA[0].id, s.teamB[1].id, history, 0, 1) +
+      pairHistoryScore(s.teamA[1].id, s.teamB[0].id, history, 0, 1) +
+      pairHistoryScore(s.teamA[1].id, s.teamB[1].id, history, 0, 1);
+    return { split: s, score: partnerScore * 5 + opponentScore };
+  });
+
+  scored.sort((a, b) => a.score - b.score);
+  return scored[0].split;
+}
+
+function formMixedTeamsRandom(activeMen, activeWomen, history) {
+  const men = shuffle(activeMen);
+  const remainingWomen = shuffle(activeWomen);
+  const teams = [];
+  for (const m of men) {
+    let bestIdx = 0;
+    let bestScore = Infinity;
+    for (let i = 0; i < remainingWomen.length; i++) {
+      const s = pairHistoryScore(m.id, remainingWomen[i].id, history, 1, 0);
+      if (s < bestScore) {
+        bestScore = s;
+        bestIdx = i;
+      }
+    }
+    teams.push([m, remainingWomen.splice(bestIdx, 1)[0]]);
+  }
+  return teams;
+}
+
+function formMixedTeamsByRank(activeMen, activeWomen, rankIndex) {
+  const menSorted = [...activeMen].sort((a, b) => rankIndex[a.id] - rankIndex[b.id]);
+  const womenSorted = [...activeWomen].sort((a, b) => rankIndex[a.id] - rankIndex[b.id]);
+  const k = menSorted.length;
+  const teams = [];
+  for (let i = 0; i < k; i++) {
+    teams.push([menSorted[i], womenSorted[k - 1 - i]]);
+  }
+  return teams;
+}
+
+function pairTeamsIntoCourtsByHistory(teams, history, attempts = 60) {
+  if (teams.length === 0) return [];
+  let best = null;
+  let bestScore = Infinity;
+  for (let a = 0; a < attempts; a++) {
+    const pool = shuffle(teams);
+    const courts = [];
+    while (pool.length > 0) {
+      const t1 = pool.shift();
+      let bestIdx = 0;
+      let bestC = Infinity;
+      for (let i = 0; i < pool.length; i++) {
+        let c = 0;
+        t1.forEach((p1) => pool[i].forEach((p2) => (c += pairHistoryScore(p1.id, p2.id, history, 0, 1))));
+        if (c < bestC) {
+          bestC = c;
+          bestIdx = i;
+        }
+      }
+      const t2 = pool.splice(bestIdx, 1)[0];
+      courts.push([t1, t2]);
+    }
+    const totalScore = courts.reduce((sum, [t1, t2]) => {
+      let c = 0;
+      t1.forEach((p1) => t2.forEach((p2) => (c += pairHistoryScore(p1.id, p2.id, history, 0, 1))));
+      return sum + c;
+    }, 0);
+    if (totalScore < bestScore) {
+      bestScore = totalScore;
+      best = courts;
+    }
+  }
+  return best;
+}
+
+function pairTeamsIntoCourtsByStrength(teams, standings) {
+  const pointsOf = (id) => {
+    const s = standings.find((x) => x.id === id);
+    return s ? s.points : 0;
+  };
+  const sorted = [...teams].sort((t1, t2) => {
+    const s1 = pointsOf(t1[0].id) + pointsOf(t1[1].id);
+    const s2 = pointsOf(t2[0].id) + pointsOf(t2[1].id);
+    return s2 - s1;
+  });
+  const courts = [];
+  for (let i = 0; i < sorted.length; i += 2) {
+    courts.push([sorted[i], sorted[i + 1]]);
+  }
+  return courts;
+}
+
+function toCourts(courtPairs) {
+  return courtPairs.map((pair, idx) => ({
+    court: idx + 1,
+    teamA: pair[0].map((p) => p.id),
+    teamB: pair[1].map((p) => p.id),
+    scoreA: null,
+    scoreB: null,
+  }));
+}
+
+function generateAmericanoRound(players, numCourts, priorRounds, mixedMode) {
+  const history = buildHistory(players, priorRounds);
+  const { active, sittingOut } = selectActiveForRound(players, numCourts, history, mixedMode);
+
+  if (mixedMode) {
+    const { men, women } = splitByGender(active);
+    const teams = formMixedTeamsRandom(men, women, history);
+    const courtPairs = pairTeamsIntoCourtsByHistory(teams, history);
+    return { courts: toCourts(courtPairs), sittingOut: sittingOut.map((p) => p.id) };
+  }
+
+  const groups = groupIntoFoursomes(active, history);
+  const courtPairs = groups.map((g) => {
+    const split = bestTeamSplit(g, history);
+    return [split.teamA, split.teamB];
+  });
+  return { courts: toCourts(courtPairs), sittingOut: sittingOut.map((p) => p.id) };
+}
+
+function generateMexicanoRound(players, numCourts, priorRounds, mixedMode, pairingRule) {
+  const history = buildHistory(players, priorRounds);
+  const isFirstRound = priorRounds.length === 0;
+  const { active, sittingOut } = selectActiveForRound(players, numCourts, history, mixedMode);
+
+  if (mixedMode) {
+    const { men, women } = splitByGender(active);
+    let teams;
+    let courtPairs;
+    if (isFirstRound) {
+      teams = formMixedTeamsRandom(men, women, history);
+      courtPairs = pairTeamsIntoCourtsByHistory(teams, history);
+    } else {
+      const standings = computeStandings(players, priorRounds);
+      const rankIndex = {};
+      standings.forEach((s, i) => (rankIndex[s.id] = i));
+      teams = formMixedTeamsByRank(men, women, rankIndex);
+      courtPairs = pairTeamsIntoCourtsByStrength(teams, standings);
+    }
+    return { courts: toCourts(courtPairs), sittingOut: sittingOut.map((p) => p.id) };
+  }
+
+  let ranked;
+  if (isFirstRound) {
+    ranked = shuffle(active);
+  } else {
+    const standings = computeStandings(players, priorRounds);
+    const rankIndex = {};
+    standings.forEach((s, i) => (rankIndex[s.id] = i));
+    ranked = [...active].sort((a, b) => rankIndex[a.id] - rankIndex[b.id]);
+  }
+
+  const groups = [];
+  for (let i = 0; i < ranked.length; i += 4) {
+    groups.push(ranked.slice(i, i + 4));
+  }
+
+  const courtPairs = groups.map((g) => {
+    const [r1, r2, r3, r4] = g;
+    if (pairingRule === "top-heavy") return [[r1, r2], [r3, r4]];
+    return [[r1, r4], [r2, r3]];
+  });
+
+  return { courts: toCourts(courtPairs), sittingOut: sittingOut.map((p) => p.id) };
+}
+
+function scheduleQualityScore(players, rounds) {
+  const history = buildHistory(players, rounds);
+  let score = 0;
+  Object.values(history.partnerCount).forEach((c) => {
+    if (c > 1) score += (c - 1) * (c - 1) * 10;
+  });
+  Object.values(history.opponentCount).forEach((c) => {
+    if (c > 1) score += (c - 1) * (c - 1);
+  });
+  const sitOuts = Object.values(history.sitOutCount);
+  if (sitOuts.length) {
+    score += (Math.max(...sitOuts) - Math.min(...sitOuts)) * 5;
+  }
+  return score;
+}
+
+function generateFullAmericanoSchedule(players, numCourts, numRounds, mixedMode, scheduleAttempts = 12) {
+  let best = null;
+  let bestScore = Infinity;
+  for (let attempt = 0; attempt < scheduleAttempts; attempt++) {
+    const rounds = [];
+    for (let r = 0; r < numRounds; r++) {
+      rounds.push(generateAmericanoRound(players, numCourts, rounds, mixedMode));
+    }
+    const score = scheduleQualityScore(players, rounds);
+    if (score < bestScore) {
+      bestScore = score;
+      best = rounds;
+    }
+    if (bestScore === 0) break;
+  }
+  return best;
+}
+
+function computeStandings(players, rounds) {
+  const points = {};
+  const against = {};
+  const played = {};
+  const wins = {};
+  players.forEach((p) => {
+    points[p.id] = 0;
+    against[p.id] = 0;
+    played[p.id] = 0;
+    wins[p.id] = 0;
+  });
+
+  rounds.forEach((round) => {
+    round.courts.forEach((court) => {
+      if (court.scoreA == null || court.scoreB == null) return;
+      const aWon = court.scoreA > court.scoreB;
+      const bWon = court.scoreB > court.scoreA;
+      court.teamA.forEach((id) => {
+        points[id] += court.scoreA;
+        against[id] += court.scoreB;
+        played[id] += 1;
+        if (aWon) wins[id] += 1;
+      });
+      court.teamB.forEach((id) => {
+        points[id] += court.scoreB;
+        against[id] += court.scoreA;
+        played[id] += 1;
+        if (bWon) wins[id] += 1;
+      });
+    });
+  });
+
+  return players
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      gender: p.gender,
+      points: points[p.id],
+      against: against[p.id],
+      diff: points[p.id] - against[p.id],
+      played: played[p.id],
+      wins: wins[p.id],
+    }))
+    .sort((a, b) => b.points - a.points || b.diff - a.diff || b.wins - a.wins);
+}
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+
+function genId(prefix) {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return prefix + "_" + crypto.randomUUID();
+  return prefix + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+function suggestedRounds(numPlayers) {
+  if (numPlayers <= 8) return Math.max(4, numPlayers - 1);
+  if (numPlayers <= 16) return 8;
+  return 7;
+}
+
+function playerName(players, id) {
+  const idx = players.findIndex((pl) => pl.id === id);
+  if (idx === -1) return "—";
+  const p = players[idx];
+  return p.name && p.name.trim() ? p.name.trim() : `Player ${idx + 1}`;
+}
+
+function playerById(players, id) {
+  return players.find((pl) => pl.id === id) || null;
+}
+
+function clampInt(value, min, max) {
+  const n = Math.round(Number(value));
+  if (Number.isNaN(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+function roundIsComplete(round) {
+  return round.courts.every((c) => c.scoreA != null && c.scoreB != null);
+}
+
+/* ============================================================
+   PERSISTENCE — live sync across devices via Firestore, gated on
+   being signed in to NextSet (see the LIVE SYNC block near the
+   top of this script for the actual auth/Firestore setup).
+   ============================================================ */
+
+// Everything about tournament state EXCEPT score values - used to decide
+// when the whole-state sync needs to run. Scores are deliberately excluded
+// (they sync via their own granular path above), so two phones entering
+// different courts' scores at the same moment never fight over this.
+function structuralFingerprintOf(s) {
+  if (!s || typeof s !== "object") return "";
+  const rounds = Array.isArray(s.rounds) ? s.rounds : [];
+  return JSON.stringify({
+    stage: s.stage,
+    format: s.format,
+    numCourts: s.numCourts,
+    numRounds: s.numRounds,
+    roundsTouched: s.roundsTouched,
+    pointsTarget: s.pointsTarget,
+    mixedMode: s.mixedMode,
+    pairingRule: s.pairingRule,
+    players: s.players,
+    rounds: rounds.map((r) => ({
+      sittingOut: r && r.sittingOut,
+      courts: Array.isArray(r && r.courts) ? r.courts.map((c) => ({ court: c.court, teamA: c.teamA, teamB: c.teamB })) : [],
+    })),
+  });
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+
+const initialState = {
+  stage: "setup", // 'setup' | 'tournament'
+  format: "americano", // 'americano' | 'mexicano'
+  numCourts: 2,
+  numRounds: 7,
+  roundsTouched: false, // has the user manually overridden the suggested round count?
+  pointsTarget: 24,
+  mixedMode: false,
+  pairingRule: "balanced", // 'balanced' | 'top-heavy' (mexicano only)
+  players: [],
+  rounds: [],
+  updatedAt: null,
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case "HYDRATE":
+      return { ...state, ...action.payload };
+    case "SET_FORMAT":
+      return { ...state, format: action.value };
+    case "SET_COURTS":
+      return { ...state, numCourts: action.value };
+    case "SET_ROUNDS":
+      return { ...state, numRounds: action.value, roundsTouched: true };
+    case "SET_POINTS_TARGET":
+      return { ...state, pointsTarget: action.value };
+    case "SET_MIXED":
+      return { ...state, mixedMode: action.value };
+    case "SET_PAIRING_RULE":
+      return { ...state, pairingRule: action.value };
+    case "ADD_PLAYERS": {
+      const players = [...state.players, ...action.players];
+      const nextRounds = state.roundsTouched ? state.numRounds : suggestedRounds(players.length);
+      return { ...state, players, numRounds: nextRounds };
+    }
+    case "UPDATE_PLAYER":
+      return {
+        ...state,
+        players: state.players.map((p) => (p.id === action.id ? { ...p, ...action.patch } : p)),
+      };
+    case "REMOVE_PLAYER": {
+      const players = state.players.filter((p) => p.id !== action.id);
+      const nextRounds = state.roundsTouched ? state.numRounds : suggestedRounds(Math.max(players.length, 1));
+      return { ...state, players, numRounds: nextRounds };
+    }
+    case "GENERATE_DRAW":
+      return { ...state, stage: "tournament", rounds: action.rounds };
+    case "REGENERATE_DRAW":
+      return { ...state, rounds: action.rounds };
+    case "UPDATE_SCORE": {
+      const rounds = state.rounds.map((r, ri) => {
+        if (ri !== action.roundIdx) return r;
+        return {
+          ...r,
+          courts: r.courts.map((c) => (c.court !== action.court ? c : { ...c, [action.field]: action.value })),
+        };
+      });
+      return { ...state, rounds };
+    }
+    case "ADD_ROUND":
+      return { ...state, rounds: [...state.rounds, action.round] };
+    case "RESET":
+      return { ...initialState, updatedAt: Date.now() };
+    default:
+      return state;
+  }
+}
+
+/* ============================================================
+   SMALL COMPONENTS
+   ============================================================ */
+
+function Logo({ size = 28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="28" height="28" rx="8" fill="var(--court-blue)" />
+      <path d="M9 16 H23" stroke="#FFFFFF" strokeWidth="2" strokeDasharray="2.5 2.5" strokeLinecap="round" />
+      <circle cx="16" cy="9.5" r="3.4" fill="var(--ball)" />
+      <circle cx="16" cy="22.5" r="3.4" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
+function Stepper({ value, onChange, min = 0, max = 99, label, icon }) {
+  return (
+    <div>
+      {label ? (
+        <div className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--slate)" }}>
+          {label}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="rally-stepper-btn w-9 h-9 flex items-center justify-center"
+          onClick={() => onChange(clampInt(value - 1, min, max))}
+          disabled={value <= min}
+          aria-label={`Decrease ${label || "value"}`}
+        >
+          <Minus size={16} />
+        </button>
+        <div
+          className="rally-tabular font-bold text-lg w-10 text-center"
+          style={{ color: "var(--ink)" }}
+        >
+          {icon}
+          {value}
+        </div>
+        <button
+          type="button"
+          className="rally-stepper-btn w-9 h-9 flex items-center justify-center"
+          onClick={() => onChange(clampInt(value + 1, min, max))}
+          disabled={value >= max}
+          aria-label={`Increase ${label || "value"}`}
+        >
+          <Plus size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const GENDER_CYCLE = ["-", "M", "F"];
+const GENDER_LABEL = { "-": "—", M: "M", F: "F" };
+
+function GenderDot({ gender, size = 8 }) {
+  if (gender !== "M" && gender !== "F") return null;
+  const color = gender === "M" ? "var(--court-blue)" : "#D6469B";
+  return (
+    <span
+      className="inline-block rounded-full align-middle"
+      style={{ width: size, height: size, background: color, marginRight: 6 }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function GenderToggle({ value, onChange }) {
+  return (
+    <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: "var(--line)" }}>
+      {GENDER_CYCLE.map((g) => (
+        <button
+          key={g}
+          type="button"
+          onClick={() => onChange(g)}
+          className="w-8 h-8 text-xs font-bold flex items-center justify-center"
+          style={{
+            background: value === g ? "var(--ink)" : "var(--card)",
+            color: value === g ? "#FFFFFF" : "var(--slate)",
+            borderRight: g !== "F" ? "1px solid var(--line)" : "none",
+          }}
+          aria-pressed={value === g}
+          aria-label={g === "-" ? "Gender not set" : g === "M" ? "Male" : "Female"}
+        >
+          {GENDER_LABEL[g]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PlayerRow({ player, index, onUpdate, onRemove }) {
+  return (
+    <div className="flex items-center gap-2 py-1.5 rally-fade-in">
+      <div
+        className="rally-tabular text-xs font-bold w-6 text-center flex-shrink-0"
+        style={{ color: "var(--slate-light)" }}
+      >
+        {index + 1}
+      </div>
+      <input
+        type="text"
+        value={player.name}
+        placeholder={`Player ${index + 1}`}
+        onChange={(e) => onUpdate(player.id, { name: e.target.value })}
+        className="flex-1 min-w-0 px-3 py-2 rounded-lg text-sm font-medium"
+        style={{ border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)" }}
+      />
+      <GenderToggle value={player.gender} onChange={(g) => onUpdate(player.id, { gender: g })} />
+      <button
+        type="button"
+        onClick={() => onRemove(player.id)}
+        className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg"
+        style={{ color: "var(--slate)" }}
+        aria-label={`Remove ${player.name || "player"}`}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <X size={16} />
+      </button>
+    </div>
+  );
+}
+
+function FormatCard({ selected, onSelect, icon, title, tagline, points }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={"rally-format-card p-4 w-full" + (selected ? " selected" : "")}
+      aria-pressed={selected}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: selected ? "var(--court-blue)" : "var(--chalk)", color: selected ? "#fff" : "var(--slate)" }}
+        >
+          {icon}
+        </div>
+        {selected ? (
+          <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "var(--court-blue)" }}>
+            <Check size={12} color="#fff" strokeWidth={3} />
+          </div>
+        ) : null}
+      </div>
+      <div className="rally-display text-base mb-1" style={{ color: "var(--ink)" }}>
+        {title}
+      </div>
+      <div className="text-xs leading-snug mb-2" style={{ color: "var(--slate)" }}>
+        {tagline}
+      </div>
+      <ul className="text-xs space-y-0.5" style={{ color: "var(--slate)" }}>
+        {points.map((pt, i) => (
+          <li key={i} className="flex items-start gap-1.5">
+            <span style={{ color: selected ? "var(--court-blue)" : "var(--slate-light)" }}>•</span>
+            <span>{pt}</span>
+          </li>
+        ))}
+      </ul>
+    </button>
+  );
+}
+
+/* ============================================================
+   SETUP SCREEN
+   ============================================================ */
+
+function SetupScreen({ state, dispatch, onGenerate, syncStatus }) {
+  const { men, women, other } = useMemo(() => splitByGender(state.players), [state.players]);
+  const genderReady = state.mixedMode ? Math.min(men.length, women.length) > 0 : true;
+  const enoughPlayers = state.players.length >= 4;
+  const maxTeamsPossible = state.mixedMode ? Math.min(men.length, women.length, state.numCourts * 2) : null;
+  const canGenerate = enoughPlayers && genderReady && (!state.mixedMode || maxTeamsPossible >= 1);
+
+  const addBlankPlayers = (n) => {
+    const start = state.players.length;
+    const newPlayers = Array.from({ length: n }, (_, i) => ({
+      id: genId("player"),
+      name: "",
+      gender: "-",
+    }));
+    dispatch({ type: "ADD_PLAYERS", players: newPlayers });
+  };
+
+  const updatePlayer = (id, patch) => dispatch({ type: "UPDATE_PLAYER", id, patch });
+  const removePlayer = (id) => dispatch({ type: "REMOVE_PLAYER", id });
+
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-28 pt-6 sm:pt-10">
+      <div className="flex items-center gap-2.5 mb-1">
+        <Logo size={32} />
+        <div className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
+          Rally
+        </div>
+      </div>
+      <p className="text-sm mb-2" style={{ color: "var(--slate)" }}>
+        Set up a padel Americano or Mexicano, draw the rounds, and keep score from courtside.
+      </p>
+      <div className="mb-7">
+        <SyncBadge status={syncStatus} />
+      </div>
+
+      {/* Format */}
+      <SectionLabel n={1} title="Format" />
+      <div className="grid grid-cols-2 gap-3 mb-7">
+        <FormatCard
+          selected={state.format === "americano"}
+          onSelect={() => dispatch({ type: "SET_FORMAT", value: "americano" })}
+          icon={<Shuffle size={17} />}
+          title="Americano"
+          tagline="Fixed rotation, social & even."
+          points={["Whole schedule set up front", "Everyone partners everyone", "Best for mixed levels"]}
+        />
+        <FormatCard
+          selected={state.format === "mexicano"}
+          onSelect={() => dispatch({ type: "SET_FORMAT", value: "mexicano" })}
+          icon={<TrendingUp size={17} />}
+          title="Mexicano"
+          tagline="Leaderboard picks the next round."
+          points={["Round 1 is random", "Then winners face winners", "Best for competitive nights"]}
+        />
+      </div>
+
+      {/* Players */}
+      <SectionLabel n={2} title="Players" trailing={`${state.players.length}`} />
+      <div className="rally-card p-3 mb-7">
+        {state.players.length === 0 ? (
+          <div className="text-center py-6 px-4">
+            <Users size={22} className="mx-auto mb-2" style={{ color: "var(--slate-light)" }} />
+            <p className="text-sm font-medium mb-0.5" style={{ color: "var(--ink)" }}>
+              No players yet
+            </p>
+            <p className="text-xs" style={{ color: "var(--slate)" }}>
+              Add players below — you can fill in real names and gender now or later.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y max-h-80 overflow-y-auto rally-scroll" style={{ borderColor: "var(--line)" }}>
+            {state.players.map((p, i) => (
+              <PlayerRow key={p.id} player={p} index={i} onUpdate={updatePlayer} onRemove={removePlayer} />
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2 mt-3 pt-3" style={{ borderTop: state.players.length ? "1px solid var(--line)" : "none" }}>
+          <button
+            type="button"
+            onClick={() => addBlankPlayers(1)}
+            className="rally-chip px-3 py-1.5 text-xs font-semibold flex items-center gap-1"
+            style={{ color: "var(--ink)" }}
+          >
+            <Plus size={13} /> Add player
+          </button>
+          <button
+            type="button"
+            onClick={() => addBlankPlayers(4)}
+            className="rally-chip px-3 py-1.5 text-xs font-semibold"
+            style={{ color: "var(--ink)" }}
+          >
+            +4
+          </button>
+          <button
+            type="button"
+            onClick={() => addBlankPlayers(8)}
+            className="rally-chip px-3 py-1.5 text-xs font-semibold"
+            style={{ color: "var(--ink)" }}
+          >
+            +8
+          </button>
+        </div>
+      </div>
+      {!enoughPlayers ? (
+        <InlineNote icon={<Info size={13} />} tone="muted">
+          Add at least 4 players (a multiple of 4 keeps every court full).
+        </InlineNote>
+      ) : null}
+
+      {/* Courts & rounds */}
+      <SectionLabel n={3} title="Courts & rounds" />
+      <div className="rally-card p-4 mb-7 flex items-center justify-between flex-wrap gap-4">
+        <Stepper
+          label="Courts"
+          value={state.numCourts}
+          min={1}
+          max={20}
+          onChange={(v) => dispatch({ type: "SET_COURTS", value: v })}
+        />
+        <Stepper
+          label="Rounds"
+          value={state.numRounds}
+          min={1}
+          max={20}
+          onChange={(v) => dispatch({ type: "SET_ROUNDS", value: v })}
+        />
+        <Stepper
+          label="Points / match"
+          value={state.pointsTarget}
+          min={4}
+          max={48}
+          onChange={(v) => dispatch({ type: "SET_POINTS_TARGET", value: v })}
+        />
+      </div>
+
+      {/* Advanced */}
+      <SectionLabel n={4} title="Options" />
+      <div className="rally-card p-4 mb-7 space-y-4">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={state.mixedMode}
+            onChange={(e) => dispatch({ type: "SET_MIXED", value: e.target.checked })}
+            className="mt-0.5 w-4 h-4 flex-shrink-0"
+          />
+          <span>
+            <span className="text-sm font-semibold block" style={{ color: "var(--ink)" }}>
+              Mixed doubles
+            </span>
+            <span className="text-xs" style={{ color: "var(--slate)" }}>
+              Every team is one man + one woman. Needs gender set on the players who'll play.
+            </span>
+          </span>
+        </label>
+
+        {state.mixedMode ? (
+          <div className="text-xs rounded-lg p-2.5" style={{ background: "var(--chalk)", color: "var(--slate)" }}>
+            {men.length} men · {women.length} women{other.length ? ` · ${other.length} unspecified` : ""}.{" "}
+            {maxTeamsPossible >= 1
+              ? `${maxTeamsPossible * 2} players can be placed per round; the rest rotate through byes.`
+              : "Set gender (M/F) for at least one man and one woman to use mixed mode."}
+          </div>
+        ) : null}
+
+        {state.format === "mexicano" ? (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--slate)" }}>
+              Court pairing rule
+            </div>
+            <div className="flex gap-2">
+              <PairingRuleOption
+                selected={state.pairingRule === "balanced"}
+                onClick={() => dispatch({ type: "SET_PAIRING_RULE", value: "balanced" })}
+                title="Balanced"
+                desc="1st + 4th vs 2nd + 3rd"
+              />
+              <PairingRuleOption
+                selected={state.pairingRule === "top-heavy"}
+                onClick={() => dispatch({ type: "SET_PAIRING_RULE", value: "top-heavy" })}
+                title="Top pairs"
+                desc="1st + 2nd vs 3rd + 4th"
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <button
+        type="button"
+        disabled={!canGenerate}
+        onClick={onGenerate}
+        className="rally-btn-primary w-full py-3.5 flex items-center justify-center gap-2 text-sm"
+      >
+        Generate draw <ArrowRight size={16} />
+      </button>
+      {!canGenerate && enoughPlayers ? (
+        <InlineNote icon={<AlertTriangle size={13} />} tone="warn">
+          Mixed mode needs at least one man and one woman with gender set.
+        </InlineNote>
+      ) : null}
+    </div>
+  );
+}
+
+function SectionLabel({ n, title, trailing }) {
+  return (
+    <div className="flex items-center justify-between mb-2.5">
+      <div className="flex items-center gap-2">
+        <span
+          className="rally-tabular text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center"
+          style={{ background: "var(--ink)", color: "#fff" }}
+        >
+          {n}
+        </span>
+        <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--ink)" }}>
+          {title}
+        </span>
+      </div>
+      {trailing != null ? (
+        <span className="rally-tabular text-xs font-semibold" style={{ color: "var(--slate)" }}>
+          {trailing}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function InlineNote({ icon, tone = "muted", children }) {
+  const styles =
+    tone === "warn"
+      ? { background: "var(--danger-light)", color: "var(--danger)" }
+      : { background: "var(--court-blue-light)", color: "var(--court-blue-deep)" };
+  return (
+    <div className="flex items-start gap-1.5 text-xs rounded-lg px-3 py-2 -mt-4 mb-7" style={styles}>
+      <span className="mt-0.5 flex-shrink-0">{icon}</span>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function PairingRuleOption({ selected, onClick, title, desc }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex-1 text-left px-3 py-2 rounded-lg"
+      style={{
+        border: selected ? "1.5px solid var(--court-blue)" : "1.5px solid var(--line)",
+        background: selected ? "var(--court-blue-light)" : "var(--card)",
+      }}
+      aria-pressed={selected}
+    >
+      <div className="text-xs font-bold" style={{ color: "var(--ink)" }}>
+        {title}
+      </div>
+      <div className="rally-tabular text-xs" style={{ color: "var(--slate)" }}>
+        {desc}
+      </div>
+    </button>
+  );
+}
+
+/* ============================================================
+   PLAY SCREEN
+   ============================================================ */
+
+function CourtMatchCard({ court, players, onScoreChange }) {
+  const aHas = court.scoreA != null;
+  const bHas = court.scoreB != null;
+  const aWins = aHas && bHas && court.scoreA > court.scoreB;
+  const bWins = aHas && bHas && court.scoreB > court.scoreA;
+
+  const handleChange = (field) => (e) => {
+    const raw = e.target.value.replace(/[^0-9]/g, "").slice(0, 3);
+    onScoreChange(field, raw === "" ? null : parseInt(raw, 10));
+  };
+
+  return (
+    <div className="rally-court-card p-4">
+      <div
+        className="text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5"
+        style={{ color: "rgba(255,255,255,0.75)" }}
+      >
+        Court {court.court}
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <TeamLabel players={players} ids={court.teamA} winning={aWins} />
+        <input
+          inputMode="numeric"
+          pattern="[0-9]*"
+          className="rally-score-input rally-tabular"
+          value={court.scoreA == null ? "" : String(court.scoreA)}
+          onChange={handleChange("scoreA")}
+          placeholder="0"
+          aria-label="Team A score"
+        />
+      </div>
+
+      <div className="rally-net-line my-3" />
+
+      <div className="flex items-center justify-between gap-3">
+        <input
+          inputMode="numeric"
+          pattern="[0-9]*"
+          className="rally-score-input rally-tabular"
+          value={court.scoreB == null ? "" : String(court.scoreB)}
+          onChange={handleChange("scoreB")}
+          placeholder="0"
+          aria-label="Team B score"
+        />
+        <TeamLabel players={players} ids={court.teamB} winning={bWins} align="right" />
+      </div>
+    </div>
+  );
+}
+
+function TeamLabel({ players, ids, winning, align = "left" }) {
+  return (
+    <div className={"min-w-0 flex-1" + (align === "right" ? " text-right" : "")}>
+      {ids.map((id) => {
+        const p = playerById(players, id);
+        return (
+          <div
+            key={id}
+            className="text-sm font-bold truncate flex items-center gap-0"
+            style={{
+              color: winning ? "var(--ball)" : "#FFFFFF",
+              justifyContent: align === "right" ? "flex-end" : "flex-start",
+              transition: "color 0.3s ease",
+            }}
+          >
+            {align !== "right" && p ? <GenderDot gender={p.gender} /> : null}
+            <span className="truncate">{playerName(players, id)}</span>
+            {align === "right" && p && p.gender && (p.gender === "M" || p.gender === "F") ? (
+              <span style={{ marginLeft: 6 }}>
+                <GenderDot gender={p.gender} />
+              </span>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SitOutChips({ ids, players }) {
+  if (!ids || ids.length === 0) return null;
+  return (
+    <div className="flex items-start gap-1.5 text-xs mt-3" style={{ color: "var(--slate)" }}>
+      <Coffee size={13} className="mt-0.5 flex-shrink-0" />
+      <span>
+        Resting: {ids.map((id) => playerName(players, id)).join(", ")}
+      </span>
+    </div>
+  );
+}
+
+function RoundBlock({ round, roundIndex, totalRounds, players, dispatch, expanded, onToggle, pointsTarget, tournamentId }) {
+  const complete = roundIsComplete(round);
+  return (
+    <div className="mb-4 rally-fade-in">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between py-2.5 px-1"
+        style={{ borderBottom: expanded ? "1px solid var(--line)" : "1px solid transparent" }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="rally-display text-base" style={{ color: "var(--ink)" }}>
+            Round {roundIndex + 1}
+          </span>
+          <span className="text-xs" style={{ color: "var(--slate)" }}>
+            of {totalRounds}
+          </span>
+          {complete ? (
+            <span
+              className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: "var(--court-blue)" }}
+            >
+              <Check size={10} color="#fff" strokeWidth={3} />
+            </span>
+          ) : null}
+        </div>
+        {expanded ? <ChevronUp size={18} style={{ color: "var(--slate)" }} /> : <ChevronDown size={18} style={{ color: "var(--slate)" }} />}
+      </button>
+
+      {expanded ? (
+        <div className="rally-fade-in">
+          <div className="text-xs mt-3 mb-3 px-1" style={{ color: "var(--slate)" }}>
+            Playing to {pointsTarget} pts
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {round.courts.map((court, courtIdx) => (
+              <CourtMatchCard
+                key={court.court}
+                court={court}
+                players={players}
+                onScoreChange={(field, value) => {
+                  dispatch({ type: "UPDATE_SCORE", roundIdx: roundIndex, court: court.court, field, value });
+                  syncScoreFieldToFirestore(tournamentId, roundIndex, court.court, field, value);
+                }}
+              />
+            ))}
+          </div>
+          <div className="px-1">
+            <SitOutChips ids={round.sittingOut} players={players} />
+          </div>
+        </div>
+      ) : (
+        <div className="px-1 pb-1">
+          {round.courts.map((court) => (
+            <div key={court.court} className="text-xs py-0.5 truncate" style={{ color: "var(--slate)" }}>
+              C{court.court}: {court.teamA.map((id) => playerName(players, id)).join(" & ")}{" "}
+              <span className="rally-tabular font-semibold" style={{ color: "var(--ink)" }}>
+                {court.scoreA ?? "–"}–{court.scoreB ?? "–"}
+              </span>{" "}
+              {court.teamB.map((id) => playerName(players, id)).join(" & ")}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlayScreen({ state, dispatch, tournamentId }) {
+  const totalRounds = state.format === "americano" ? state.rounds.length : state.numRounds;
+  const currentIndex = useMemo(() => {
+    const firstIncomplete = state.rounds.findIndex((r) => !roundIsComplete(r));
+    return firstIncomplete === -1 ? Math.max(state.rounds.length - 1, 0) : firstIncomplete;
+  }, [state.rounds]);
+
+  const [expandedIdx, setExpandedIdx] = useState(currentIndex);
+  useEffect(() => {
+    setExpandedIdx(currentIndex);
+  }, [state.rounds.length]);
+
+  const noScoresYet = state.rounds.every((r) => r.courts.every((c) => c.scoreA == null && c.scoreB == null));
+  const lastRound = state.rounds[state.rounds.length - 1];
+  const canGenerateNext =
+    state.format === "mexicano" &&
+    lastRound &&
+    roundIsComplete(lastRound) &&
+    state.rounds.length < state.numRounds;
+
+  const handleRegenerate = () => {
+    const rounds = generateFullAmericanoSchedule(state.players, state.numCourts, state.numRounds, state.mixedMode);
+    dispatch({ type: "REGENERATE_DRAW", rounds });
+  };
+
+  const handleGenerateNext = () => {
+    const round = generateMexicanoRound(state.players, state.numCourts, state.rounds, state.mixedMode, state.pairingRule);
+    dispatch({ type: "ADD_ROUND", round });
+  };
+
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-28 pt-4">
+      {state.format === "americano" && noScoresYet && state.rounds.length > 0 ? (
+        <button
+          type="button"
+          onClick={handleRegenerate}
+          className="rally-chip w-full mb-4 py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
+          style={{ color: "var(--ink)" }}
+        >
+          <Shuffle size={13} /> Shuffle a different draw
+        </button>
+      ) : null}
+
+      {state.rounds.map((round, idx) => (
+        <RoundBlock
+          key={idx}
+          round={round}
+          roundIndex={idx}
+          totalRounds={totalRounds}
+          players={state.players}
+          dispatch={dispatch}
+          expanded={expandedIdx === idx}
+          onToggle={() => setExpandedIdx(expandedIdx === idx ? -1 : idx)}
+          pointsTarget={state.pointsTarget}
+          tournamentId={tournamentId}
+        />
+      ))}
+
+      {canGenerateNext ? (
+        <button
+          type="button"
+          onClick={handleGenerateNext}
+          className="rally-btn-primary w-full py-3.5 flex items-center justify-center gap-2 text-sm mt-2"
+        >
+          Complete round &amp; generate round {state.rounds.length + 1} <ArrowRight size={16} />
+        </button>
+      ) : null}
+
+      {state.format === "mexicano" && lastRound && !roundIsComplete(lastRound) ? (
+        <InlineNote icon={<Info size={13} />} tone="muted">
+          Enter every score in round {state.rounds.length} to generate the next round.
+        </InlineNote>
+      ) : null}
+
+      {state.format === "mexicano" && state.rounds.length >= state.numRounds && lastRound && roundIsComplete(lastRound) ? (
+        <div className="text-center py-4">
+          <Trophy size={22} className="mx-auto mb-1.5" style={{ color: "var(--ball-dark)" }} />
+          <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>
+            All {state.numRounds} rounds complete — check Standings for the winner.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ============================================================
+   STANDINGS SCREEN
+   ============================================================ */
+
+function StandingsScreen({ state }) {
+  const standings = useMemo(() => computeStandings(state.players, state.rounds), [state.players, state.rounds]);
+  const anyPlayed = standings.some((s) => s.played > 0);
+  const leader = standings[0];
+  const rest = standings.slice(1);
+
+  return (
+    <div className="max-w-xl mx-auto px-4 pb-28 pt-4">
+      {!anyPlayed ? (
+        <div className="text-center py-10">
+          <Trophy size={22} className="mx-auto mb-2" style={{ color: "var(--slate-light)" }} />
+          <p className="text-sm font-medium" style={{ color: "var(--ink)" }}>
+            No scores yet
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: "var(--slate)" }}>
+            Standings fill in as match scores are entered.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div
+            className="rally-card rally-fade-in flex items-center gap-3 px-4 py-4 mb-3"
+            style={{
+              background: "linear-gradient(155deg, var(--ball-light) 0%, var(--card) 65%)",
+              borderColor: "rgba(184,146,43,0.35)",
+            }}
+          >
+            <div
+              className="rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ width: 44, height: 44, background: "var(--ball)", boxShadow: "var(--shadow-md)" }}
+            >
+              <Crown size={19} color="var(--ink)" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color: "var(--ball-dark)" }}>
+                In the lead
+              </div>
+              <div className="text-base font-bold truncate flex items-center" style={{ color: "var(--ink)" }}>
+                <GenderDot gender={leader.gender} />
+                <span className="truncate">{leader.name && leader.name.trim() ? leader.name.trim() : "Player 1"}</span>
+              </div>
+              <div className="rally-tabular text-xs mt-0.5" style={{ color: "var(--slate)" }}>
+                {leader.played} played · {leader.diff >= 0 ? "+" : ""}
+                {leader.diff} diff · {leader.wins}W
+              </div>
+            </div>
+            <div className="rally-display text-3xl flex-shrink-0" style={{ color: "var(--ink)" }}>
+              {leader.points}
+            </div>
+          </div>
+
+          {rest.length > 0 ? (
+            <div className="rally-card divide-y" style={{ borderColor: "var(--line)" }}>
+              {rest.map((s, i) => (
+                <div key={s.id} className="flex items-center gap-3 px-4 py-3">
+                  <div
+                    className="rally-tabular text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ background: "var(--chalk)", color: "var(--slate)" }}
+                  >
+                    {i + 2}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold truncate flex items-center" style={{ color: "var(--ink)" }}>
+                      <GenderDot gender={s.gender} />
+                      <span className="truncate">{s.name && s.name.trim() ? s.name.trim() : `Player ${i + 2}`}</span>
+                    </div>
+                    <div className="rally-tabular text-xs" style={{ color: "var(--slate)" }}>
+                      {s.played} played · {s.diff >= 0 ? "+" : ""}
+                      {s.diff} diff · {s.wins}W
+                    </div>
+                  </div>
+                  <div className="rally-tabular text-xl font-black flex-shrink-0" style={{ color: "var(--ink)", fontFamily: "'Archivo Black', sans-serif" }}>
+                    {s.points}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   TOP BAR / NAV
+   ============================================================ */
+
+function TabButton({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={"rally-tab-btn flex-1 py-2 text-sm" + (active ? " active" : "")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SyncBadge({ status }) {
+  const map = {
+    live: { color: "#1DA34E", label: "Live" },
+    connecting: { color: "var(--slate-light)", label: "Connecting…" },
+    error: { color: "var(--danger)", label: "Sync error" },
+    local: { color: "var(--slate-light)", label: "This device" },
+  };
+  const cfg = map[status] || map.local;
+  return (
+    <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--slate)" }} title={status === "local" ? "Not connected to live sync - saved in this browser only" : undefined}>
+      <span
+        className="rounded-full flex-shrink-0"
+        style={{ width: 7, height: 7, background: cfg.color }}
+      />
+      {cfg.label}
+    </span>
+  );
+}
+
+function TopBar({ state, activeTab, setActiveTab, onResetClick, syncStatus }) {
+  const completed = state.rounds.filter(roundIsComplete).length;
+  const totalRounds = state.format === "americano" ? state.rounds.length : state.numRounds;
+  return (
+    <div className="sticky top-0 z-10" style={{ background: "var(--chalk)", borderBottom: "1px solid var(--line)" }}>
+      <div className="max-w-xl mx-auto px-4 pt-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Logo size={22} />
+          <span className="rally-display text-base" style={{ color: "var(--ink)" }}>
+            Rally
+          </span>
+          <span
+            className="rally-chip px-2 py-0.5 text-xs font-semibold capitalize ml-1"
+            style={{ color: "var(--slate)" }}
+          >
+            {state.format}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <SyncBadge status={syncStatus} />
+          <span className="rally-tabular text-xs font-semibold" style={{ color: "var(--slate)" }}>
+            {completed}/{totalRounds} rounds
+          </span>
+          <button
+            type="button"
+            onClick={onResetClick}
+            className="w-8 h-8 flex items-center justify-center rounded-lg"
+            style={{ color: "var(--slate)" }}
+            aria-label="Start a new tournament"
+          >
+            <RotateCcw size={16} />
+          </button>
+        </div>
+      </div>
+      <div className="max-w-xl mx-auto px-4 py-3 flex gap-2">
+        <TabButton active={activeTab === "play"} onClick={() => setActiveTab("play")}>
+          Play
+        </TabButton>
+        <TabButton active={activeTab === "standings"} onClick={() => setActiveTab("standings")}>
+          Standings
+        </TabButton>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmModal({ title, body, confirmLabel = "Start over", onCancel, onConfirm }) {
+  return (
+    <div
+      className="fixed inset-0 flex items-end sm:items-center justify-center p-4 z-50"
+      style={{ background: "rgba(16,25,43,0.5)" }}
+      onClick={onCancel}
+    >
+      <div
+        className="rally-card w-full max-w-sm p-5 rally-fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-base font-bold mb-1.5" style={{ color: "var(--ink)" }}>
+          {title}
+        </div>
+        <p className="text-sm mb-5" style={{ color: "var(--slate)" }}>
+          {body}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+            style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
+            style={{ background: "var(--danger)" }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   ROOT APP
+   ============================================================ */
+
+function RallyApp() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [uid, setUid] = useState(null);
+  const [tournamentId, setTournamentId] = useState(null);
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const [loaded, setLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState("play");
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("connecting");
+  // Tracks the last structural fingerprint we know Firestore already has -
+  // either because we just received it, or because we just wrote it
+  // ourselves. The save-effect only writes when the CURRENT fingerprint
+  // differs from this, which (unlike a one-shot "skip the next save" flag)
+  // stays correct no matter how local edits and incoming updates interleave.
+  const lastSyncedFingerprint = useRef(null);
+
+  const structuralFingerprint = useMemo(() => structuralFingerprintOf(state), [
+    state.stage,
+    state.format,
+    state.numCourts,
+    state.numRounds,
+    state.roundsTouched,
+    state.pointsTarget,
+    state.mixedMode,
+    state.pairingRule,
+    state.players,
+    state.rounds,
+  ]);
+
+  // Step 1: must be signed in via NextSet's own sign-in flow before
+  // anything here loads. There's no separate sign-in UI on this page on
+  // purpose - not signed in just means back to the main page to sign in
+  // there, same account either way.
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        location.replace("index.html?nav=1");
+        return;
+      }
+      setUid(user.uid);
+      setAuthChecked(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Step 2: once signed in, resolve which tournament this tab is looking
+  // at (from ?t= in the URL, or a freshly created one if this is a brand
+  // new tournament), then subscribe to it live.
+  useEffect(() => {
+    if (!authChecked || !uid) return;
+    let cancelled = false;
+    let unsubscribeSnapshot = null;
+
+    (async () => {
+      let id;
+      try {
+        id = await ensureTournamentId(uid);
+      } catch (e) {
+        if (!cancelled) {
+          setSyncStatus("error");
+          setLoaded(true);
+        }
+        return;
+      }
+      if (cancelled) return;
+      setTournamentId(id);
+
+      unsubscribeSnapshot = onSnapshot(
+        doc(db, "tournaments", id),
+        (snap) => {
+          if (cancelled) return;
+          if (snap.exists()) {
+            const val = snap.data();
+            lastSyncedFingerprint.current = structuralFingerprintOf(val);
+            dispatch({ type: "HYDRATE", payload: val });
+          }
+          setSyncStatus("live");
+          setLoaded(true);
+        },
+        () => {
+          if (cancelled) return;
+          setSyncStatus("error");
+          setLoaded(true);
+        },
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
+  }, [authChecked, uid]);
+
+  // Step 3: whole-tournament save whenever something structural changes.
+  // Scores are deliberately excluded here - they sync through
+  // syncScoreFieldToFirestore instead, via its own transaction, so two
+  // courts entering scores at the same moment never race this save.
+  useEffect(() => {
+    if (!loaded || !tournamentId) return;
+    if (structuralFingerprint === lastSyncedFingerprint.current) return; // already matches Firestore
+    const t = setTimeout(() => {
+      lastSyncedFingerprint.current = structuralFingerprint;
+      setDoc(doc(db, "tournaments", tournamentId), { ...state, updatedAt: serverTimestamp() })
+        .catch(() => setSyncStatus("error"));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [structuralFingerprint, loaded, tournamentId]);
+
+  const handleGenerate = () => {
+    let rounds;
+    if (state.format === "americano") {
+      rounds = generateFullAmericanoSchedule(state.players, state.numCourts, state.numRounds, state.mixedMode);
+    } else {
+      const firstRound = generateMexicanoRound(state.players, state.numCourts, [], state.mixedMode, state.pairingRule);
+      rounds = [firstRound];
+    }
+    dispatch({ type: "GENERATE_DRAW", rounds: rounds || [] });
+    setActiveTab("play");
+  };
+
+  const handleConfirmReset = () => {
+    dispatch({ type: "RESET" });
+    setConfirmReset(false);
+    setActiveTab("play");
+  };
+
+  if (!authChecked || !loaded) {
+    return (
+      <div className="rally-root flex items-center justify-center" style={{ minHeight: "60vh" }}>
+        <style>{GLOBAL_STYLES}</style>
+        <Loader2 size={22} className="rally-spin" style={{ color: "var(--court-blue)" }} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="rally-root">
+      <style>{GLOBAL_STYLES}</style>
+
+      <div className="max-w-xl mx-auto px-4 pt-3">
+        <a
+          href="index.html?nav=1"
+          className="text-xs font-semibold"
+          style={{ color: "var(--slate)", textDecoration: "none" }}
+        >
+          &larr; NextSet
+        </a>
+      </div>
+
+      {state.stage === "tournament" ? (
+        <TopBar state={state} activeTab={activeTab} setActiveTab={setActiveTab} onResetClick={() => setConfirmReset(true)} syncStatus={syncStatus} />
+      ) : null}
+
+      {state.stage === "setup" ? (
+        <SetupScreen state={state} dispatch={dispatch} onGenerate={handleGenerate} syncStatus={syncStatus} />
+      ) : activeTab === "play" ? (
+        <PlayScreen state={state} dispatch={dispatch} tournamentId={tournamentId} />
+      ) : (
+        <StandingsScreen state={state} />
+      )}
+
+      {confirmReset ? (
+        <ConfirmModal
+          title="Start a new tournament?"
+          body="This clears the current players, draw and scores for everyone viewing this Rally board."
+          onCancel={() => setConfirmReset(false)}
+          onConfirm={handleConfirmReset}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+
+const rallyRootEl = document.getElementById("root");
+ReactDOM.createRoot(rallyRootEl).render(<RallyApp />);
+if (typeof window !== "undefined") window.__rallyMounted = true;
+</script>
+</body>
+</html>

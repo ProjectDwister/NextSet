@@ -1,9 +1,10 @@
 // Bump this whenever the app-shell file list below changes; old caches
 // get cleaned up automatically on activate.
-const CACHE_NAME = 'nextset-v8';
+const CACHE_NAME = 'nextset-v10';
 
 const APP_SHELL = [
   './index.html',
+  './rally.html',
   './auth.js',
   './events.js',
   './invites.js',
@@ -12,6 +13,9 @@ const APP_SHELL = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-maskable-192.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png',
 ];
 
 // cache.addAll() is all-or-nothing — if even one of these URLs fails to
