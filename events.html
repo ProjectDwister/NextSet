@@ -482,12 +482,12 @@
   try { localStorage.setItem('nextset-last-section', 'events'); } catch (e) {}
 </script>
 
-<div id="events-boot-status" style="min-height:60vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--muted); font-family:sans-serif;">
-  <div>Loading Events…</div>
-  <div id="events-boot-errors" style="max-width:320px; text-align:center; font-size:0.85rem;"></div>
+<div id="root">
+  <div id="events-boot-status" style="min-height:60vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--muted); font-family:sans-serif;">
+    <div>Loading Events…</div>
+    <div id="events-boot-errors" style="max-width:320px; text-align:center; font-size:0.85rem;"></div>
+  </div>
 </div>
-
-<div id="root"></div>
 
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onerror="eventsReportError('Failed to load React from unpkg.com')"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onerror="eventsReportError('Failed to load ReactDOM from unpkg.com')"></script>
@@ -1040,7 +1040,7 @@ function CreateEventForm({ onCreate, creating, error }) {
           </div>
           <div>
             <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Start time</label>
-            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+            <input type="time" step="1800" value={startTime} onChange={(e) => setStartTime(e.target.value)}
               className="w-full px-3 py-2.5 rounded-lg text-sm"
               style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
           </div>
