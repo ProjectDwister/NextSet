@@ -2271,16 +2271,19 @@ function RallyApp() {
       <style>{GLOBAL_STYLES}</style>
 
       <div className="max-w-xl mx-auto px-4 pt-3 flex items-center justify-between">
-        <div>
-          <div
-            className="text-xs font-bold uppercase mb-0.5"
+        <div className="flex items-baseline gap-1.5">
+          <span
+            className="text-xs font-bold uppercase"
             style={{ color: "var(--slate)", letterSpacing: "0.04em" }}
           >
             Court Pop
-          </div>
-          <div className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
+          </span>
+          <span className="text-sm font-bold" style={{ color: "var(--slate)" }}>
+            -
+          </span>
+          <span className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
             Formats
-          </div>
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -2298,9 +2301,8 @@ function RallyApp() {
             href="index.html?nav=1"
             className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
             style={{
-              color: "var(--slate)",
-              background: "var(--card)",
-              border: "1px solid var(--line)",
+              color: "var(--court-blue-ink)",
+              background: "var(--court-blue)",
               textDecoration: "none",
             }}
           >
