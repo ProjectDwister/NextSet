@@ -2,6 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<script>
+  // Must run before the CSS below, or it can't prevent a flash of the
+  // wrong theme on load. Reads the exact same key NextSet's index.html
+  // writes to, so a choice made in one place is respected in the other.
+  (function () {
+    try {
+      var saved = localStorage.getItem('nextset-theme');
+      if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    } catch (e) {}
+  })();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
 <title>Rally — Padel Tournament Scorer</title>
 <meta name="description" content="Run a padel Americano or Mexicano tournament: build the draw, keep score courtside, track the leaderboard." />
@@ -285,33 +296,64 @@ const Loader2 = (p) => (
 
 const GLOBAL_STYLES = `
 .rally-root {
-  --ink: #0B1220;
-  --court-blue: #0F3D8C;
-  --court-blue-deep: #071F4D;
-  --court-blue-mid: #1B4FA0;
-  --court-blue-light: #EEF2FA;
-  --chalk: #F6F5F1;
-  --card: #FFFFFF;
-  --ball: #B8922B;
-  --ball-dark: #7A5E1A;
-  --ball-light: #F7F0DC;
-  --slate: #555F78;
-  --slate-light: #97A0B5;
-  --line: rgba(11,18,32,0.10);
-  --line-strong: rgba(11,18,32,0.16);
-  --danger: #A3352B;
-  --danger-light: #FBECEA;
-  --shadow-sm: 0 1px 2px rgba(11,18,32,.05), 0 1px 1px rgba(11,18,32,.03);
-  --shadow-md: 0 10px 26px -8px rgba(11,18,32,.14), 0 2px 6px rgba(11,18,32,.05);
-  --shadow-lg: 0 24px 56px -16px rgba(11,18,32,.24), 0 4px 12px rgba(11,18,32,.08);
+  --ink: #eef2ff;
+  --court-blue: #78e08f;
+  --court-blue-deep: #3fb35e;
+  --court-blue-mid: #5fcf7a;
+  --court-blue-light: rgba(120,224,143,0.12);
+  --court-blue-ink: #06210f;
+  --chalk: #0b1020;
+  --card: #121933;
+  --ball: #c9a869;
+  --ball-dark: #a6884f;
+  --ball-light: rgba(201,168,105,0.14);
+  --slate: #aab4d6;
+  --slate-light: #7c86a8;
+  --line: rgba(255,255,255,0.09);
+  --line-strong: rgba(255,255,255,0.16);
+  --danger: #c0392b;
+  --danger-light: rgba(192,57,43,0.16);
+  --chip-solid: #14182a;
+  --chip-solid-ink: #ffffff;
+  --court-blue-highlight: #3d2b0a;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.25), 0 1px 1px rgba(0,0,0,.15);
+  --shadow-md: 0 10px 26px -8px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.25);
+  --shadow-lg: 0 24px 56px -16px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.3);
   font-family: 'Archivo', system-ui, -apple-system, sans-serif;
   background: var(--chalk);
   background-image:
-    radial-gradient(1200px 480px at 50% -120px, rgba(15,61,140,0.05), transparent 60%),
+    radial-gradient(1200px 480px at 50% -120px, rgba(120,224,143,0.05), transparent 60%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
   color: var(--ink);
   min-height: 100vh;
   width: 100%;
+}
+
+:root[data-theme="light"] .rally-root {
+  --ink: #14182a;
+  --court-blue: #2f9e5c;
+  --court-blue-deep: #1f7a45;
+  --court-blue-mid: #268a4f;
+  --court-blue-light: rgba(47,158,92,0.08);
+  --court-blue-ink: #ffffff;
+  --court-blue-highlight: #fff8e8;
+  --chalk: #f6f4ef;
+  --card: #ffffff;
+  --ball: #93711f;
+  --ball-dark: #6b5316;
+  --ball-light: rgba(147,113,31,0.1);
+  --slate: #5c6478;
+  --slate-light: #8890a3;
+  --line: rgba(11,18,32,0.10);
+  --line-strong: rgba(11,18,32,0.16);
+  --danger: #c0392b;
+  --danger-light: #fbecea;
+  --shadow-sm: 0 1px 2px rgba(11,18,32,.05), 0 1px 1px rgba(11,18,32,.03);
+  --shadow-md: 0 10px 26px -8px rgba(11,18,32,.14), 0 2px 6px rgba(11,18,32,.05);
+  --shadow-lg: 0 24px 56px -16px rgba(11,18,32,.24), 0 4px 12px rgba(11,18,32,.08);
+  background-image:
+    radial-gradient(1200px 480px at 50% -120px, rgba(47,158,92,0.05), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
 }
 
 .rally-root * { box-sizing: border-box; }
@@ -435,8 +477,8 @@ const GLOBAL_STYLES = `
 }
 
 .rally-btn-primary {
-  background: var(--ink);
-  color: #FFFFFF;
+  background: var(--court-blue);
+  color: var(--court-blue-ink);
   border-radius: 14px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -461,8 +503,8 @@ const GLOBAL_STYLES = `
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .rally-tab-btn.active {
-  background: var(--ink);
-  color: #FFFFFF;
+  background: var(--chip-solid);
+  color: var(--chip-solid-ink);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1058,9 +1100,9 @@ function Logo({ size = 28 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
       <rect x="2" y="2" width="28" height="28" rx="8" fill="var(--court-blue)" />
-      <path d="M9 16 H23" stroke="#FFFFFF" strokeWidth="2" strokeDasharray="2.5 2.5" strokeLinecap="round" />
+      <path d="M9 16 H23" stroke="var(--court-blue-ink)" strokeWidth="2" strokeDasharray="2.5 2.5" strokeLinecap="round" />
       <circle cx="16" cy="9.5" r="3.4" fill="var(--ball)" />
-      <circle cx="16" cy="22.5" r="3.4" fill="#FFFFFF" />
+      <circle cx="16" cy="22.5" r="3.4" fill="var(--court-blue-ink)" />
     </svg>
   );
 }
@@ -1129,8 +1171,8 @@ function GenderToggle({ value, onChange }) {
           onClick={() => onChange(g)}
           className="w-8 h-8 text-xs font-bold flex items-center justify-center"
           style={{
-            background: value === g ? "var(--ink)" : "var(--card)",
-            color: value === g ? "#FFFFFF" : "var(--slate)",
+            background: value === g ? "var(--chip-solid)" : "var(--card)",
+            color: value === g ? "var(--chip-solid-ink)" : "var(--slate)",
             borderRight: g !== "F" ? "1px solid var(--line)" : "none",
           }}
           aria-pressed={value === g}
@@ -1186,13 +1228,13 @@ function FormatCard({ selected, onSelect, icon, title, tagline, points }) {
       <div className="flex items-center justify-between mb-2">
         <div
           className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: selected ? "var(--court-blue)" : "var(--chalk)", color: selected ? "#fff" : "var(--slate)" }}
+          style={{ background: selected ? "var(--court-blue)" : "var(--chalk)", color: selected ? "var(--court-blue-ink)" : "var(--slate)" }}
         >
           {icon}
         </div>
         {selected ? (
           <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "var(--court-blue)" }}>
-            <Check size={12} color="#fff" strokeWidth={3} />
+            <Check size={12} color="var(--court-blue-ink)" strokeWidth={3} />
           </div>
         ) : null}
       </div>
@@ -1428,7 +1470,7 @@ function SectionLabel({ n, title, trailing }) {
       <div className="flex items-center gap-2">
         <span
           className="rally-tabular text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center"
-          style={{ background: "var(--ink)", color: "#fff" }}
+          style={{ background: "var(--chip-solid)", color: "var(--chip-solid-ink)" }}
         >
           {n}
         </span>
@@ -1499,7 +1541,7 @@ function CourtMatchCard({ court, players, onScoreChange }) {
     <div className="rally-court-card p-4">
       <div
         className="text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5"
-        style={{ color: "rgba(255,255,255,0.75)" }}
+        style={{ color: "var(--court-blue-ink)", opacity: 0.75 }}
       >
         Court {court.court}
       </div>
@@ -1545,7 +1587,8 @@ function TeamLabel({ players, ids, winning, align = "left" }) {
             key={id}
             className="text-sm font-bold truncate flex items-center gap-0"
             style={{
-              color: winning ? "var(--ball)" : "#FFFFFF",
+              color: winning ? "var(--court-blue-highlight)" : "var(--court-blue-ink)",
+              opacity: winning ? 1 : 0.75,
               justifyContent: align === "right" ? "flex-end" : "flex-start",
               transition: "color 0.3s ease",
             }}
@@ -1598,7 +1641,7 @@ function RoundBlock({ round, roundIndex, totalRounds, players, dispatch, expande
               className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
               style={{ background: "var(--court-blue)" }}
             >
-              <Check size={10} color="#fff" strokeWidth={3} />
+              <Check size={10} color="var(--court-blue-ink)" strokeWidth={3} />
             </span>
           ) : null}
         </div>
