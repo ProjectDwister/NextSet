@@ -4,8 +4,8 @@
 <meta charset="utf-8"/>
 <script>
   // Applied before anything renders, so switching themes never shows a
-  // flash of the other one on load. Rally reads this exact same key —
-  // see the matching script near the top of rally.html.
+  // flash of the other one on load. The Formats page reads this exact
+  // same key — see the matching script near the top of rally.html.
   (function () {
     try {
       var saved = localStorage.getItem('nextset-theme');
@@ -428,7 +428,7 @@
 <body>
 
   <script>
-    // If Rally was the last section open, jump straight back to it on a
+    // If Formats was the last section open, jump straight back to it on a
     // fresh launch (e.g. tapping the home-screen icon) — but never
     // override an explicit navigation click, which is how both this
     // page and rally.html always link to each other (?nav=1).
@@ -504,7 +504,7 @@
         </button>
       </div>
       <div class="app-header-right">
-        <a href="rally.html?nav=1" class="btn-sm secondary" id="rally-link">Rally</a>
+        <a href="rally.html?nav=1" class="btn-sm secondary" id="rally-link">Formats</a>
         <button id="new-game-btn" class="btn-sm">+ New game</button>
       </div>
     </header>

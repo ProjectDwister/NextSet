@@ -14,7 +14,7 @@
   })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
-<title>Rally — Padel Tournament Scorer</title>
+<title>Formats · NextSet</title>
 <meta name="description" content="Run a padel Americano or Mexicano tournament: build the draw, keep score courtside, track the leaderboard." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='8' fill='%230F3D8C'/%3E%3Cpath d='M9 16 H23' stroke='%23FFFFFF' stroke-width='2' stroke-dasharray='2.5 2.5' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='9.5' r='3.4' fill='%23B8922B'/%3E%3Ccircle cx='16' cy='22.5' r='3.4' fill='%23FFFFFF'/%3E%3C/svg%3E" />
 
@@ -1905,7 +1905,7 @@ function TopBar({ state, activeTab, setActiveTab, onResetClick, syncStatus }) {
         <div className="flex items-center gap-2">
           <Logo size={22} />
           <span className="rally-display text-base" style={{ color: "var(--ink)" }}>
-            Rally
+            Formats
           </span>
           <span
             className="rally-chip px-2 py-0.5 text-xs font-semibold capitalize ml-1"
@@ -2128,8 +2128,13 @@ function RallyApp() {
       <div className="max-w-xl mx-auto px-4 pt-3">
         <a
           href="index.html?nav=1"
-          className="text-xs font-semibold"
-          style={{ color: "var(--slate)", textDecoration: "none" }}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
+          style={{
+            color: "var(--slate)",
+            background: "var(--card)",
+            border: "1px solid var(--line)",
+            textDecoration: "none",
+          }}
         >
           &larr; NextSet
         </a>
