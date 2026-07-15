@@ -508,11 +508,7 @@
   <!-- ===== the app itself ===== -->
   <div class="view" id="view-app">
     <header class="app-header">
-      <div class="app-brand-row">
-        <span class="app-brand">Court Pop</span>
-        <span class="app-brand-sep">-</span>
-        <span class="app-title">Your Games</span>
-      </div>
+      <div class="app-title">Your Games</div>
       <div class="app-header-right">
         <button id="menu-btn" class="menu-btn" type="button" aria-label="Menu">
           <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
@@ -616,7 +612,7 @@
   <!-- ===== menu modal ===== -->
   <div class="modal-backdrop" id="menu-modal-backdrop">
     <div class="modal">
-      <h2>Menu</h2>
+      <h2>Court Pop</h2>
 
       <div id="menu-error" class="error"></div>
 
@@ -802,6 +798,10 @@
         showAppError(friendlyError(err));
       });
       maybeShowReminderBanner();
+
+      if (new URLSearchParams(location.search).get('view') === 'history') {
+        showHistory();
+      }
     }
 
     // Only offered when it can actually work, and only once — not shown
@@ -1070,11 +1070,13 @@
       attachCardHandlers(events);
     }
 
-    $('menu-history-btn').addEventListener('click', () => {
+    function showHistory() {
       $('normal-content').hidden = true;
       $('history-view').hidden = false;
       $('menu-modal-backdrop').classList.remove('active');
-    });
+    }
+
+    $('menu-history-btn').addEventListener('click', showHistory);
 
     $('history-back-btn').addEventListener('click', () => {
       $('history-view').hidden = true;

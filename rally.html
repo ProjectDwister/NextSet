@@ -1982,7 +1982,7 @@ function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, e
     >
       <div className="rally-card w-full max-w-sm p-5 rally-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="text-base font-bold mb-4" style={{ color: "var(--ink)" }}>
-          Menu
+          Court Pop
         </div>
 
         {error ? (
@@ -2050,6 +2050,13 @@ function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, e
 
         <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
 
+        <a
+          href="index.html?nav=1&view=history"
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-2 flex items-center justify-center"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)", textDecoration: "none" }}
+        >
+          History
+        </a>
         <button
           type="button"
           onClick={onSignOut}
@@ -2271,19 +2278,8 @@ function RallyApp() {
       <style>{GLOBAL_STYLES}</style>
 
       <div className="max-w-xl mx-auto px-4 pt-3 flex flex-col gap-3">
-        <div className="flex items-baseline gap-1.5">
-          <span
-            className="text-xs font-bold uppercase"
-            style={{ color: "var(--slate)", letterSpacing: "0.04em" }}
-          >
-            Court Pop
-          </span>
-          <span className="text-sm font-bold" style={{ color: "var(--slate)" }}>
-            -
-          </span>
-          <span className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
-            Formats
-          </span>
+        <div className="rally-display text-2xl" style={{ color: "var(--ink)" }}>
+          Formats
         </div>
         <div className="flex items-center gap-2">
           <button
