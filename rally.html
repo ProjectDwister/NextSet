@@ -2270,7 +2270,7 @@ function RallyApp() {
     <div className="rally-root">
       <style>{GLOBAL_STYLES}</style>
 
-      <div className="max-w-xl mx-auto px-4 pt-3 flex items-center justify-between">
+      <div className="max-w-xl mx-auto px-4 pt-3 flex flex-col gap-3">
         <div className="flex items-baseline gap-1.5">
           <span
             className="text-xs font-bold uppercase"
@@ -2311,6 +2311,7 @@ function RallyApp() {
         </div>
       </div>
 
+      <div className="max-w-xl mx-auto px-4" style={{ height: 1, background: "var(--line)", marginTop: 16 }} />
       {state.stage === "tournament" ? (
         <TopBar state={state} activeTab={activeTab} setActiveTab={setActiveTab} onResetClick={() => setConfirmReset(true)} syncStatus={syncStatus} />
       ) : null}
