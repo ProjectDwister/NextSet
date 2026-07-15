@@ -2017,6 +2017,14 @@ function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, e
           Menu
         </div>
 
+        <a
+          href="index.html?nav=1"
+          className="w-full py-2.5 rounded-xl text-sm font-semibold mb-4 flex items-center justify-center"
+          style={{ border: "1.5px solid var(--line)", color: "var(--ink)", textDecoration: "none" }}
+        >
+          Switch to Your Games
+        </a>
+
         {error ? (
           <div
             className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg"
@@ -2359,23 +2367,6 @@ function RallyApp() {
               <line x1="13.54" y1="6.46" x2="15.16" y2="4.84" />
             </svg>
           </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href="index.html?nav=1"
-            className="inline-flex items-center justify-center"
-            style={{
-              color: "var(--court-blue-ink)",
-              background: "var(--court-blue)",
-              textDecoration: "none",
-              padding: "9px 16px",
-              borderRadius: 10,
-              fontWeight: 600,
-              fontSize: "0.85rem",
-            }}
-          >
-            Your Games
-          </a>
         </div>
       </div>
 
