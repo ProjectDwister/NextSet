@@ -451,7 +451,107 @@ function scheduleQualityScore(players, rounds) {
   return score;
 }
 
+/* ============================================================
+   Perfect-partnership construction — the special case where
+   numPlayers is a multiple of 4 (no sit-outs needed) and
+   numRounds === numPlayers - 1. This is exactly the condition
+   under which a fully repeat-free partnership schedule is
+   mathematically guaranteed to exist (every pair of players
+   partners exactly once) — see the "circle method" for
+   constructing a 1-factorization of the complete graph K_n,
+   the classical construction for round-robin scheduling.
+
+   Unlike generateFullAmericanoSchedule's randomized search
+   below, this is deterministic and exact for partnerships: it
+   doesn't try multiple attempts and keep the best, it
+   constructs the perfect answer directly. Court assignment
+   (which two partnerships share a court) still uses a
+   best-effort randomized search afterward, same spirit as
+   groupIntoFoursomes below, since the circle method only
+   guarantees the partnership layer, not who ends up facing
+   whom — minimizing repeat opponents remains a secondary,
+   best-effort goal, exactly as it already is everywhere else
+   in this file.
+   ============================================================ */
+
+function circleMethodPartnerships(playerIds, numRounds) {
+  const n = playerIds.length;
+  const fixed = playerIds[n - 1];
+  const rotating = playerIds.slice(0, n - 1);
+  const m = rotating.length; // n - 1, always odd since n is even
+  const rounds = [];
+  for (let r = 0; r < numRounds; r++) {
+    const pairs = [[fixed, rotating[r % m]]];
+    for (let i = 1; i <= (m - 1) / 2; i++) {
+      const a = rotating[(r + i) % m];
+      const b = rotating[(((r - i) % m) + m) % m];
+      pairs.push([a, b]);
+    }
+    rounds.push(pairs);
+  }
+  return rounds;
+}
+
+function pairConflictScore(pairA, pairB, history) {
+  let score = 0;
+  pairA.forEach((a) => pairB.forEach((b) => {
+    score += pairHistoryScore(a, b, history, 0, 1); // opponent weight only — partner conflicts are structurally impossible here
+  }));
+  return score;
+}
+
+function groupPairsIntoCourts(pairs, history, attempts = 80) {
+  let best = null;
+  let bestScore = Infinity;
+  for (let a = 0; a < attempts; a++) {
+    const pool = shuffle(pairs);
+    const courts = [];
+    while (pool.length > 0) {
+      const pairA = pool.shift();
+      let bestIdx = 0;
+      let bestConflict = Infinity;
+      for (let i = 0; i < pool.length; i++) {
+        const c = pairConflictScore(pairA, pool[i], history);
+        if (c < bestConflict) { bestConflict = c; bestIdx = i; }
+      }
+      const pairB = pool.splice(bestIdx, 1)[0];
+      courts.push([pairA, pairB]);
+    }
+    const totalScore = courts.reduce((sum, [pA, pB]) => sum + pairConflictScore(pA, pB, history), 0);
+    if (totalScore < bestScore) { bestScore = totalScore; best = courts; }
+  }
+  return best;
+}
+
+function generatePerfectAmericanoSchedule(players, numCourts, numRounds) {
+  const n = players.length;
+  if (n % 4 !== 0) return null; // needs to divide evenly into courts — this construction doesn't handle sit-outs
+  if (numRounds !== n - 1) return null; // only exact for this specific round count
+  if (numCourts !== n / 4) return null; // must actually use every player, every round
+
+  const ids = players.map((p) => p.id);
+  const partnershipRounds = circleMethodPartnerships(ids, numRounds);
+
+  const rounds = [];
+  partnershipRounds.forEach((pairs) => {
+    const history = buildHistory(players, rounds);
+    const courtGroups = groupPairsIntoCourts(pairs, history);
+    const courts = courtGroups.map(([pairA, pairB], idx) => ({
+      court: idx + 1,
+      teamA: pairA,
+      teamB: pairB,
+      scoreA: null,
+      scoreB: null,
+    }));
+    rounds.push({ courts, sittingOut: [] });
+  });
+  return rounds;
+}
+
 function generateFullAmericanoSchedule(players, numCourts, numRounds, scheduleAttempts = 12) {
+  const perfect = generatePerfectAmericanoSchedule(players, numCourts, numRounds);
+  if (perfect) return perfect;
+
   let best = null;
   let bestScore = Infinity;
   for (let attempt = 0; attempt < scheduleAttempts; attempt++) {
