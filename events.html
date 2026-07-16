@@ -1858,6 +1858,7 @@ function EventsApp() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [inviteBusyId, setInviteBusyId] = useState(null);
+  const [acceptError, setAcceptError] = useState("");
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuName, setMenuName] = useState("");
@@ -1969,11 +1970,13 @@ function EventsApp() {
 
   async function handleAcceptInvite(inv) {
     setInviteBusyId(inv.eventId);
+    setAcceptError("");
     try {
       await acceptPadelEventInvite(inv.eventId, inv.id, uid, profile.name);
       setSelectedId(inv.eventId);
     } catch (e) {
-      // surfaced implicitly: invite stays in the list, they can try again
+      console.error('acceptPadelEventInvite failed:', e);
+      setAcceptError("Your invite was marked accepted, but adding you to the event failed: " + (e && e.message ? e.message : "unknown error") + ". Please tell whoever's organizing — this needs fixing on their end.");
     } finally {
       setInviteBusyId(null);
     }
@@ -1990,11 +1993,13 @@ function EventsApp() {
 
   async function handleAcceptOrganizerInvite(inv) {
     setInviteBusyId(inv.eventId);
+    setAcceptError("");
     try {
       await acceptOrganizerInvite(inv.eventId, inv.id, uid, profile.name);
       setSelectedId(inv.eventId);
     } catch (e) {
-      // surfaced implicitly: invite stays in the list, they can try again
+      console.error('acceptOrganizerInvite failed:', e);
+      setAcceptError("Your invite was marked accepted, but adding you as an organizer failed: " + (e && e.message ? e.message : "unknown error") + ". Please tell whoever's organizing — this needs fixing on their end.");
     } finally {
       setInviteBusyId(null);
     }
@@ -2087,6 +2092,13 @@ function EventsApp() {
                 Couldn't check for pending invitations — this usually means a one-time Firestore setup step
                 (a missing index) hasn't finished yet. Reloading in a minute often fixes it; if it doesn't,
                 check the browser console for a Firestore link to create the missing index.
+              </div>
+            </div>
+          ) : null}
+          {acceptError ? (
+            <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "1rem" }}>
+              <div className="text-sm px-3 py-2.5 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+                {acceptError}
               </div>
             </div>
           ) : null}
