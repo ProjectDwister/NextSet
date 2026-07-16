@@ -904,7 +904,180 @@ function scheduleQualityScore(players, rounds) {
   return score;
 }
 
+/* ============================================================
+   Perfect-partnership construction — same special case and same
+   "circle method" reasoning as the Cloud Function's copy of this
+   (functions/index.js) — deliberately kept in sync rather than
+   diverging, for the same reason the rest of this engine was
+   ported faithfully in the first place. One addition here that
+   the Cloud Function's copy doesn't need: gated on !mixedMode,
+   since the circle method has no concept of gender-balanced
+   partnerships, and padelEvents (the only caller of the Cloud
+   Function's copy) never uses mixed mode to begin with.
+   ============================================================ */
+
+function circleMethodPartnerships(playerIds, numRounds) {
+  const n = playerIds.length;
+  const fixed = playerIds[n - 1];
+  const rotating = playerIds.slice(0, n - 1);
+  const m = rotating.length;
+  const rounds = [];
+  for (let r = 0; r < numRounds; r++) {
+    const pairs = [[fixed, rotating[r % m]]];
+    for (let i = 1; i <= (m - 1) / 2; i++) {
+      const a = rotating[(r + i) % m];
+      const b = rotating[(((r - i) % m) + m) % m];
+      pairs.push([a, b]);
+    }
+    rounds.push(pairs);
+  }
+  return rounds;
+}
+
+function pairConflictScore(pairA, pairB, history) {
+  let score = 0;
+  pairA.forEach((a) => pairB.forEach((b) => {
+    score += pairHistoryScore(a, b, history, 0, 1);
+  }));
+  return score;
+}
+
+function groupPairsIntoCourts(pairs, history, attempts = 80) {
+  let best = null;
+  let bestScore = Infinity;
+  for (let a = 0; a < attempts; a++) {
+    const pool = shuffle(pairs);
+    const courts = [];
+    while (pool.length > 0) {
+      const pairA = pool.shift();
+      let bestIdx = 0;
+      let bestConflict = Infinity;
+      for (let i = 0; i < pool.length; i++) {
+        const c = pairConflictScore(pairA, pool[i], history);
+        if (c < bestConflict) { bestConflict = c; bestIdx = i; }
+      }
+      const pairB = pool.splice(bestIdx, 1)[0];
+      courts.push([pairA, pairB]);
+    }
+    const totalScore = courts.reduce((sum, [pA, pB]) => sum + pairConflictScore(pA, pB, history), 0);
+    if (totalScore < bestScore) { bestScore = totalScore; best = courts; }
+  }
+  return best;
+}
+
+function permutations(arr) {
+  if (arr.length <= 1) return [arr];
+  const result = [];
+  for (let i = 0; i < arr.length; i++) {
+    const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+    permutations(rest).forEach((p) => result.push([arr[i], ...p]));
+  }
+  return result;
+}
+
+// Decides which court NUMBER each already-fixed group of 4 plays on
+// this round — never touches who's grouped with whom, only where.
+// Same reasoning and same code as the Cloud Function's copy
+// (functions/index.js), kept in sync deliberately.
+function assignCourtNumbers(groups, courtHistory, numCourts) {
+  const courtNumbers = Array.from({ length: numCourts }, (_, i) => i + 1);
+
+  function scoreOf(assignment) {
+    let score = 0;
+    assignment.forEach((court, groupIdx) => {
+      const [pairA, pairB] = groups[groupIdx];
+      [...pairA, ...pairB].forEach((id) => {
+        const c = (courtHistory[id] && courtHistory[id][court]) || 0;
+        score += c * c;
+      });
+    });
+    return score;
+  }
+
+  const candidates = numCourts <= 7
+    ? permutations(courtNumbers)
+    : Array.from({ length: 300 }, () => shuffle(courtNumbers));
+
+  let best = null;
+  let bestScore = Infinity;
+  candidates.forEach((assignment) => {
+    const s = scoreOf(assignment);
+    if (s < bestScore) { bestScore = s; best = assignment; }
+  });
+  return best;
+}
+
+function courtBalanceScore(players, numCourts, rounds) {
+  const numRounds = rounds.length;
+  const ideal = numRounds / numCourts;
+  const courtCounts = {};
+  players.forEach((p) => { courtCounts[p.id] = {}; });
+  rounds.forEach((round) => {
+    round.courts.forEach((c) => {
+      [...c.teamA, ...c.teamB].forEach((id) => {
+        courtCounts[id][c.court] = (courtCounts[id][c.court] || 0) + 1;
+      });
+    });
+  });
+  let score = 0;
+  players.forEach((p) => {
+    for (let c = 1; c <= numCourts; c++) {
+      const actual = courtCounts[p.id][c] || 0;
+      score += (actual - ideal) * (actual - ideal);
+    }
+  });
+  return score;
+}
+
+function buildOnePerfectAttempt(players, numCourts, numRounds, partnershipRounds) {
+  const ids = players.map((p) => p.id);
+  const courtHistory = {};
+  ids.forEach((id) => { courtHistory[id] = {}; });
+
+  const rounds = [];
+  partnershipRounds.forEach((pairs) => {
+    const history = buildHistory(players, rounds);
+    const courtGroups = groupPairsIntoCourts(pairs, history);
+    const courtNumberAssignment = assignCourtNumbers(courtGroups, courtHistory, numCourts);
+
+    const courts = courtGroups.map(([pairA, pairB], idx) => {
+      const courtNum = courtNumberAssignment[idx];
+      [...pairA, ...pairB].forEach((id) => {
+        courtHistory[id][courtNum] = (courtHistory[id][courtNum] || 0) + 1;
+      });
+      return { court: courtNum, teamA: pairA, teamB: pairB, scoreA: null, scoreB: null };
+    });
+    courts.sort((a, b) => a.court - b.court);
+    rounds.push({ courts, sittingOut: [] });
+  });
+  return rounds;
+}
+
+function generatePerfectAmericanoSchedule(players, numCourts, numRounds, mixedMode, balanceAttempts = 200) {
+  const n = players.length;
+  if (mixedMode) return null;
+  if (n % 4 !== 0) return null;
+  if (numRounds !== n - 1) return null;
+  if (numCourts !== n / 4) return null;
+
+  const ids = players.map((p) => p.id);
+  const partnershipRounds = circleMethodPartnerships(ids, numRounds);
+
+  let best = null;
+  let bestScore = Infinity;
+  for (let attempt = 0; attempt < balanceAttempts; attempt++) {
+    const rounds = buildOnePerfectAttempt(players, numCourts, numRounds, partnershipRounds);
+    const score = courtBalanceScore(players, numCourts, rounds);
+    if (score < bestScore) { bestScore = score; best = rounds; }
+    if (bestScore === 0) break;
+  }
+  return best;
+}
+
 function generateFullAmericanoSchedule(players, numCourts, numRounds, mixedMode, scheduleAttempts = 12) {
+  const perfect = generatePerfectAmericanoSchedule(players, numCourts, numRounds, mixedMode);
+  if (perfect) return perfect;
+
   let best = null;
   let bestScore = Infinity;
   for (let attempt = 0; attempt < scheduleAttempts; attempt++) {
