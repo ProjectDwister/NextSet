@@ -27,7 +27,7 @@ export async function getPadelEvent(eventId) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-export async function createPadelEvent(fields, myUid, myName) {
+export async function createPadelEvent(fields, myUid, myName, iAmPlaying = true) {
   const ref = await addDoc(collection(db, PADEL_EVENTS), {
     createdBy: myUid,
     dateTime: fields.dateTime,
@@ -39,7 +39,7 @@ export async function createPadelEvent(fields, myUid, myName) {
     numRounds: fields.numRounds,
     pointsTarget: fields.pointsTarget,
     notes: fields.notes || '',
-    participants: [myUid],
+    participants: iAmPlaying ? [myUid] : [],
     participantNames: { [myUid]: myName },
     organizers: [myUid],
     drawGenerated: false,
@@ -81,6 +81,23 @@ export async function removeOrganizer(eventId, uid) {
   if (organizers.length === 0) throw new Error('An event needs at least one organizer.');
   await updateDoc(doc(db, PADEL_EVENTS, eventId), {
     organizers,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Lets someone remove themself from the player list — typically the
+// organizer, after realizing they created the event but aren't
+// actually going to play. Deliberately self-only in what it's used
+// for here, even though the underlying update rule (any organizer can
+// change anything) would technically permit removing someone else too
+// — that's an existing, broader permission this function just doesn't
+// exercise, not a new restriction being added.
+export async function removeSelfFromParticipants(eventId, myUid) {
+  const snap = await getDoc(doc(db, PADEL_EVENTS, eventId));
+  if (!snap.exists()) throw new Error('This event no longer exists.');
+  const participants = (snap.data().participants || []).filter((id) => id !== myUid);
+  await updateDoc(doc(db, PADEL_EVENTS, eventId), {
+    participants,
     updatedAt: serverTimestamp(),
   });
 }
@@ -203,6 +220,79 @@ export function watchPadelTournament(eventId, onChange, onError) {
     (snap) => onChange(snap.exists() ? snap.data() : null),
     onError,
   );
+}
+
+/* ============================================================
+   Organizer invites — deliberately separate from padelInvites
+   above, not a role field on the same collection. Someone can be
+   pending as an invited player and an invited organizer for the
+   same event at once; sharing one collection keyed by phone
+   number wouldn't allow that. See firestore.rules for the same
+   reasoning on the rules side.
+   ============================================================ */
+
+export async function sendOrganizerInvite(eventId, invitedPhone, invitedName, myUid) {
+  await setDoc(doc(db, PADEL_EVENTS, eventId, 'organizerInvites', invitedPhone), {
+    invitedBy: myUid,
+    invitedPhone,
+    invitedName: invitedName || '',
+    status: 'pending',
+    createdAt: serverTimestamp(),
+  });
+}
+
+export function watchMyOrganizerInvites(myPhone, onChange, onError) {
+  const q = query(
+    collectionGroup(db, 'organizerInvites'),
+    where('invitedPhone', '==', myPhone),
+    where('status', '==', 'pending'),
+  );
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => ({
+      id: d.id,
+      eventId: d.ref.parent.parent.id,
+      ...d.data(),
+    }))),
+    onError,
+  );
+}
+
+export async function declineOrganizerInvite(eventId, invitedPhone) {
+  await updateDoc(doc(db, PADEL_EVENTS, eventId, 'organizerInvites', invitedPhone), {
+    status: 'declined',
+    respondedAt: serverTimestamp(),
+  });
+}
+
+// Same two-step shape as acceptPadelEventInvite, adds to organizers
+// instead of participants — accepting an organizer invite does NOT
+// also make you a participant; those stay two independent things,
+// exactly as requested.
+export async function acceptOrganizerInvite(eventId, invitedPhone, myUid, myName) {
+  await updateDoc(doc(db, PADEL_EVENTS, eventId, 'organizerInvites', invitedPhone), {
+    status: 'accepted',
+    respondedAt: serverTimestamp(),
+  });
+
+  const eventRef = doc(db, PADEL_EVENTS, eventId);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(eventRef);
+    if (!snap.exists()) {
+      throw new Error('This event no longer exists — it may have been deleted.');
+    }
+    const data = snap.data();
+    const organizers = data.organizers || [];
+    if (organizers.includes(myUid)) return; // already an organizer, nothing to do
+    if (organizers.length >= 4) {
+      throw new Error('This event already has the maximum of 4 organizers.');
+    }
+    tx.update(eventRef, {
+      organizers: [...organizers, myUid],
+      participantNames: { ...(data.participantNames || {}), [myUid]: myName },
+      updatedAt: serverTimestamp(),
+    });
+  });
 }
 
 // Same transaction-based approach as Rally's own syncScoreFieldToFirestore

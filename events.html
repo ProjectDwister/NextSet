@@ -505,6 +505,7 @@ import {
   updatePadelEvent,
   addOrganizer,
   removeOrganizer,
+  removeSelfFromParticipants,
   watchMyPadelEvents,
   sendPadelEventInvite,
   watchMyPadelEventInvites,
@@ -512,6 +513,10 @@ import {
   acceptPadelEventInvite,
   watchPadelTournament,
   syncPadelScoreField,
+  sendOrganizerInvite,
+  watchMyOrganizerInvites,
+  declineOrganizerInvite,
+  acceptOrganizerInvite,
 } from './padelEvents.js';
 
 const { useEffect, useMemo, useState } = React;
@@ -990,6 +995,7 @@ function CreateEventForm({ onCreate, creating, error }) {
   const [courts, setCourts] = useState("");
   const [capacity, setCapacity] = useState(12);
   const [notes, setNotes] = useState("");
+  const [iAmPlaying, setIAmPlaying] = useState(true);
   const [localError, setLocalError] = useState("");
 
   const numCourts = Math.max(1, Math.floor(Number(capacity) / 4));
@@ -1009,7 +1015,7 @@ function CreateEventForm({ onCreate, creating, error }) {
       numRounds: suggestedRounds(Number(capacity)),
       pointsTarget: 24,
       notes: notes.trim(),
-    });
+    }, iAmPlaying);
   };
 
   return (
@@ -1079,6 +1085,19 @@ function CreateEventForm({ onCreate, creating, error }) {
           style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)", resize: "vertical" }} />
       </div>
 
+      <div className="rally-card p-4 mb-5">
+        <label className="flex items-start gap-3" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={iAmPlaying} onChange={(e) => setIAmPlaying(e.target.checked)}
+            className="mt-0.5" style={{ width: "auto", flexShrink: 0 }} />
+          <span>
+            <span className="text-sm font-semibold block" style={{ color: "var(--ink)" }}>I'll be playing</span>
+            <span className="text-xs" style={{ color: "var(--slate)" }}>
+              Uncheck this if you're only organizing — you'll still be the organizer either way, just not counted as one of the players.
+            </span>
+          </span>
+        </label>
+      </div>
+
       <button type="button" onClick={handleSubmit} disabled={creating}
         className="rally-btn-primary w-full py-3.5 text-sm">
         {creating ? "Creating…" : "Create event"}
@@ -1096,16 +1115,22 @@ function formatEventWhen(ev) {
   return `${dayStr} · ${startStr} – ${endStr}`;
 }
 
-function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganizerChange }) {
+function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganizerChange, onLeaveAsPlayer }) {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+
+  const [orgPhone, setOrgPhone] = useState("");
+  const [orgName, setOrgName] = useState("");
+  const [sendingOrgInvite, setSendingOrgInvite] = useState(false);
   const [orgError, setOrgError] = useState("");
+  const [leaving, setLeaving] = useState(false);
 
   const participants = Object.entries(event.participantNames || {});
   const organizers = event.organizers || [];
   const spotsLeft = event.capacity - (event.participants || []).length;
+  const iAmParticipant = (event.participants || []).includes(myUid);
 
   const handleInvite = async () => {
     const digits = phone.replace(/[^0-9+]/g, "");
@@ -1121,6 +1146,23 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
       setError(e && e.message ? e.message : "Could not send invite.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleInviteOrganizer = async () => {
+    const digits = orgPhone.replace(/[^0-9+]/g, "");
+    if (!digits) return setOrgError("Enter a phone number.");
+    if (organizers.length >= 4) return setOrgError("This event already has the maximum of 4 organizers.");
+    setSendingOrgInvite(true);
+    setOrgError("");
+    try {
+      await sendOrganizerInvite(eventId, digits, orgName.trim(), myUid);
+      setOrgPhone("");
+      setOrgName("");
+    } catch (e) {
+      setOrgError(e && e.message ? e.message : "Could not send organizer invite.");
+    } finally {
+      setSendingOrgInvite(false);
     }
   };
 
@@ -1142,6 +1184,15 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
     }
   };
 
+  const handleLeaveAsPlayer = async () => {
+    setLeaving(true);
+    try {
+      await onLeaveAsPlayer();
+    } finally {
+      setLeaving(false);
+    }
+  };
+
   return (
     <div className="max-w-xl mx-auto px-4 pb-28">
       <div className="rally-display text-xl mb-1" style={{ color: "var(--ink)" }}>
@@ -1149,6 +1200,62 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
       </div>
       <p className="text-sm mb-1" style={{ color: "var(--slate)" }}>{formatEventWhen(event)}</p>
       <p className="text-sm mb-5" style={{ color: "var(--slate)" }}>{event.courts}</p>
+
+      <div className="rally-card p-4 mb-5">
+        <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizers</div>
+        <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+          Up to 4. Organizers can invite, add players, edit, and manage scoring — whether or not they're playing.
+        </div>
+        {orgError ? (
+          <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+            {orgError}
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {organizers.map((uid) => (
+            <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
+              {(event.participantNames || {})[uid] || "Someone"}
+              {isOrganizer && organizers.length > 1 ? (
+                <button type="button" onClick={() => revokeOrganizer(uid)} style={{ width: "auto", color: "var(--danger)", fontWeight: 700 }}>&times;</button>
+              ) : null}
+            </span>
+          ))}
+        </div>
+
+        {isOrganizer && organizers.length < 4 && participants.some(([uid]) => !organizers.includes(uid)) ? (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {participants.filter(([uid]) => !organizers.includes(uid)).map(([uid, pname]) => (
+              <button key={uid} type="button" onClick={() => makeOrganizer(uid, pname)}
+                className="text-xs font-semibold px-3 py-1 rounded-full"
+                style={{ width: "auto", border: "1px dashed var(--line-strong)", color: "var(--slate)" }}>
+                + Make {pname} an organizer
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {isOrganizer && organizers.length < 4 ? (
+          <React.Fragment>
+            <div style={{ height: 1, background: "var(--line)", margin: "12px 0" }} />
+            <div className="text-xs font-semibold mb-2" style={{ color: "var(--slate)" }}>
+              Or invite someone by phone — they don't need to be a player
+            </div>
+            <div className="flex gap-2 mb-2">
+              <input type="tel" value={orgPhone} onChange={(e) => setOrgPhone(e.target.value)} placeholder="+91..."
+                className="flex-1 px-3 py-2.5 rounded-lg text-sm"
+                style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+              <input type="text" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="Name (optional)"
+                className="flex-1 px-3 py-2.5 rounded-lg text-sm"
+                style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+            </div>
+            <button type="button" onClick={handleInviteOrganizer} disabled={sendingOrgInvite}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold"
+              style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}>
+              {sendingOrgInvite ? "Sending…" : "Invite as organizer"}
+            </button>
+          </React.Fragment>
+        ) : null}
+      </div>
 
       <div className="rally-card p-4 mb-5">
         <div className="flex items-center justify-between mb-3">
@@ -1159,18 +1266,27 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
             {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left` : "Full — generating draw…"}
           </span>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {participants.map(([uid, pname]) => (
-            <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold" style={{ color: "var(--ink)" }}>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {participants.filter(([uid]) => (event.participants || []).includes(uid)).map(([uid, pname]) => (
+            <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
               {pname}{organizers.includes(uid) ? " ★" : ""}
+              {uid === myUid ? (
+                <button type="button" onClick={handleLeaveAsPlayer} disabled={leaving}
+                  style={{ width: "auto", color: "var(--danger)", fontWeight: 700 }} aria-label="Remove yourself as a player">&times;</button>
+              ) : null}
             </span>
           ))}
         </div>
+        {iAmParticipant ? (
+          <div className="text-xs" style={{ color: "var(--slate)" }}>
+            Not playing after all? Tap the × on your own name{isOrganizer ? " — you'll stay an organizer." : "."}
+          </div>
+        ) : null}
       </div>
 
       {isOrganizer ? (
         <div className="rally-card p-4 mb-5">
-          <div className="text-sm font-bold mb-3" style={{ color: "var(--ink)" }}>Invite someone</div>
+          <div className="text-sm font-bold mb-3" style={{ color: "var(--ink)" }}>Invite someone to play</div>
           {error ? (
             <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
               {error}
@@ -1189,39 +1305,6 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
           </button>
         </div>
       ) : null}
-
-      <div className="rally-card p-4">
-        <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizers</div>
-        <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
-          Up to 4. Organizers can invite, edit, and manage scoring — whether or not they're playing.
-        </div>
-        {orgError ? (
-          <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
-            {orgError}
-          </div>
-        ) : null}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {organizers.map((uid) => (
-            <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
-              {(event.participantNames || {})[uid] || "Someone"}
-              {isOrganizer && organizers.length > 1 ? (
-                <button type="button" onClick={() => revokeOrganizer(uid)} style={{ width: "auto", color: "var(--danger)", fontWeight: 700 }}>&times;</button>
-              ) : null}
-            </span>
-          ))}
-        </div>
-        {isOrganizer && organizers.length < 4 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {participants.filter(([uid]) => !organizers.includes(uid)).map(([uid, pname]) => (
-              <button key={uid} type="button" onClick={() => makeOrganizer(uid, pname)}
-                className="text-xs font-semibold px-3 py-1 rounded-full"
-                style={{ width: "auto", border: "1px dashed var(--line-strong)", color: "var(--slate)" }}>
-                + Make {pname} an organizer
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }
@@ -1444,15 +1527,15 @@ function EventsList({ events, onSelect }) {
   );
 }
 
-function InvitationsSection({ invites, onAccept, onDecline, busyId }) {
-  if (!invites.length) return null;
+function InvitationsSection({ invites, onAccept, onDecline, organizerInvites, onAcceptOrganizer, onDeclineOrganizer, busyId }) {
+  if (!invites.length && !organizerInvites.length) return null;
   return (
     <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "1.5rem" }}>
       <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>
         Invitations
       </div>
       {invites.map((inv) => (
-        <div key={`${inv.eventId}_${inv.id}`} className="rally-card p-4 mb-3">
+        <div key={`p_${inv.eventId}_${inv.id}`} className="rally-card p-4 mb-3">
           <div className="text-sm mb-3" style={{ color: "var(--ink)" }}>
             You've been invited to a padel event
           </div>
@@ -1462,6 +1545,27 @@ function InvitationsSection({ invites, onAccept, onDecline, busyId }) {
               {busyId === inv.eventId ? "…" : "Accept"}
             </button>
             <button type="button" disabled={busyId === inv.eventId} onClick={() => onDecline(inv)}
+              className="flex-1 py-2 text-sm rounded-xl font-semibold"
+              style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
+              Decline
+            </button>
+          </div>
+        </div>
+      ))}
+      {organizerInvites.map((inv) => (
+        <div key={`o_${inv.eventId}_${inv.id}`} className="rally-card p-4 mb-3">
+          <div className="text-sm mb-1" style={{ color: "var(--ink)" }}>
+            You've been invited to organize a padel event
+          </div>
+          <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+            You won't be added as a player — just able to invite, edit, and manage scoring.
+          </div>
+          <div className="flex gap-2">
+            <button type="button" disabled={busyId === inv.eventId} onClick={() => onAcceptOrganizer(inv)}
+              className="rally-btn-primary flex-1 py-2 text-sm">
+              {busyId === inv.eventId ? "…" : "Accept"}
+            </button>
+            <button type="button" disabled={busyId === inv.eventId} onClick={() => onDeclineOrganizer(inv)}
               className="flex-1 py-2 text-sm rounded-xl font-semibold"
               style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
               Decline
@@ -1480,6 +1584,7 @@ function EventsApp() {
   const [loaded, setLoaded] = useState(false);
   const [myEvents, setMyEvents] = useState([]);
   const [myInvites, setMyInvites] = useState([]);
+  const [myOrganizerInvites, setMyOrganizerInvites] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -1520,8 +1625,9 @@ function EventsApp() {
     if (!uid || !profile) return;
     let gotEvents = false;
     let gotInvites = false;
+    let gotOrgInvites = false;
     function maybeReady() {
-      if (gotEvents && gotInvites) setLoaded(true);
+      if (gotEvents && gotInvites && gotOrgInvites) setLoaded(true);
     }
     const unsub1 = watchMyPadelEvents(uid, (evs) => {
       setMyEvents(evs.sort((a, b) => (a.dateTime.toMillis?.() || 0) - (b.dateTime.toMillis?.() || 0)));
@@ -1533,7 +1639,12 @@ function EventsApp() {
       gotInvites = true;
       maybeReady();
     }, () => { gotInvites = true; maybeReady(); });
-    return () => { unsub1(); unsub2(); };
+    const unsub3 = watchMyOrganizerInvites(profile.phone, (invs) => {
+      setMyOrganizerInvites(invs);
+      gotOrgInvites = true;
+      maybeReady();
+    }, () => { gotOrgInvites = true; maybeReady(); });
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, [uid, profile]);
 
   function applyTheme(next) {
@@ -1564,11 +1675,11 @@ function EventsApp() {
     location.replace("index.html?nav=1");
   }
 
-  async function handleCreate(fields) {
+  async function handleCreate(fields, iAmPlaying) {
     setCreating(true);
     setCreateError("");
     try {
-      const id = await createPadelEvent(fields, uid, profile.name);
+      const id = await createPadelEvent(fields, uid, profile.name, iAmPlaying);
       setSelectedId(id);
     } catch (e) {
       setCreateError(e && e.message ? e.message : "Could not create event.");
@@ -1596,6 +1707,32 @@ function EventsApp() {
     } finally {
       setInviteBusyId(null);
     }
+  }
+
+  async function handleAcceptOrganizerInvite(inv) {
+    setInviteBusyId(inv.eventId);
+    try {
+      await acceptOrganizerInvite(inv.eventId, inv.id, uid, profile.name);
+      setSelectedId(inv.eventId);
+    } catch (e) {
+      // surfaced implicitly: invite stays in the list, they can try again
+    } finally {
+      setInviteBusyId(null);
+    }
+  }
+
+  async function handleDeclineOrganizerInvite(inv) {
+    setInviteBusyId(inv.eventId);
+    try {
+      await declineOrganizerInvite(inv.eventId, inv.id);
+    } finally {
+      setInviteBusyId(null);
+    }
+  }
+
+  async function handleLeaveAsPlayer() {
+    if (!selectedId) return;
+    await removeSelfFromParticipants(selectedId, uid);
   }
 
   if (!authChecked || !loaded) {
@@ -1657,10 +1794,12 @@ function EventsApp() {
         selectedEvent.drawGenerated
           ? <EventFull event={selectedEvent} eventId={selectedEvent.id} />
           : <EventNotFull event={selectedEvent} eventId={selectedEvent.id} myUid={uid} isOrganizer={isOrganizer}
-              onInvited={() => {}} />
+              onInvited={() => {}} onLeaveAsPlayer={handleLeaveAsPlayer} />
       ) : (
         <div style={{ paddingTop: "1.25rem" }}>
-          <InvitationsSection invites={myInvites} onAccept={handleAcceptInvite} onDecline={handleDeclineInvite} busyId={inviteBusyId} />
+          <InvitationsSection invites={myInvites} onAccept={handleAcceptInvite} onDecline={handleDeclineInvite}
+            organizerInvites={myOrganizerInvites} onAcceptOrganizer={handleAcceptOrganizerInvite} onDeclineOrganizer={handleDeclineOrganizerInvite}
+            busyId={inviteBusyId} />
 
           {myEvents.length ? <EventsList events={myEvents} onSelect={setSelectedId} /> : null}
 
