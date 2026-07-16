@@ -267,6 +267,29 @@ export async function acceptPadelEventInvite(eventId, invitedPhone, myUid, myNam
   });
 }
 
+// Live status of every player invite sent for this event — pending,
+// accepted, or declined. Unlike watchMyPadelEventInvites, this is a
+// plain subcollection read scoped to one known event, not a
+// collection-group query across all events, so it needs no extra
+// index. Shows invites sent by any organizer, not just the current
+// viewer — with multiple organizers able to send invites, seeing the
+// full picture matters more than only your own.
+export function watchSentPadelInvites(eventId, onChange, onError) {
+  return onSnapshot(
+    collection(db, PADEL_EVENTS, eventId, 'padelInvites'),
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    onError,
+  );
+}
+
+export function watchSentOrganizerInvites(eventId, onChange, onError) {
+  return onSnapshot(
+    collection(db, PADEL_EVENTS, eventId, 'organizerInvites'),
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    onError,
+  );
+}
+
 // Live view of the generated draw, once one exists. Null until the
 // Cloud Function creates it (participants.length reaching capacity).
 export function watchPadelTournament(eventId, onChange, onError) {

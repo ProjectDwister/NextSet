@@ -520,6 +520,8 @@ import {
   watchMyOrganizerInvites,
   declineOrganizerInvite,
   acceptOrganizerInvite,
+  watchSentPadelInvites,
+  watchSentOrganizerInvites,
 } from './padelEvents.js';
 
 const { useEffect, useMemo, useState } = React;
@@ -1198,6 +1200,16 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
   const [editNameValue, setEditNameValue] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
+  const [sentPlayerInvites, setSentPlayerInvites] = useState([]);
+  const [sentOrgInvites, setSentOrgInvites] = useState([]);
+
+  useEffect(() => {
+    if (!isOrganizer) return;
+    const unsub1 = watchSentPadelInvites(eventId, setSentPlayerInvites, () => {});
+    const unsub2 = watchSentOrganizerInvites(eventId, setSentOrgInvites, () => {});
+    return () => { unsub1(); unsub2(); };
+  }, [eventId, isOrganizer]);
+
   const participants = Object.entries(event.participantNames || {});
   const organizers = event.organizers || [];
   const spotsLeft = event.capacity - (event.participants || []).length;
@@ -1466,6 +1478,30 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
           </div>
         ) : null}
       </div>
+
+      {isOrganizer && (sentPlayerInvites.some((i) => i.status !== "accepted") || sentOrgInvites.some((i) => i.status !== "accepted")) ? (
+        <div className="rally-card p-4 mb-5">
+          <div className="text-sm font-bold mb-3" style={{ color: "var(--ink)" }}>Sent invitations</div>
+          {sentPlayerInvites.filter((i) => i.status !== "accepted").map((inv) => (
+            <div key={"p_" + inv.id} className="flex items-center justify-between py-1.5">
+              <span className="text-sm" style={{ color: "var(--ink)" }}>{inv.invitedName || inv.invitedPhone} <span style={{ color: "var(--slate)" }}>· player</span></span>
+              <span className="rally-chip px-3 py-1 text-xs font-semibold"
+                style={inv.status === "declined" ? { color: "var(--danger)" } : { color: "var(--slate)" }}>
+                {inv.status === "declined" ? "Declined" : "Pending"}
+              </span>
+            </div>
+          ))}
+          {sentOrgInvites.filter((i) => i.status !== "accepted").map((inv) => (
+            <div key={"o_" + inv.id} className="flex items-center justify-between py-1.5">
+              <span className="text-sm" style={{ color: "var(--ink)" }}>{inv.invitedName || inv.invitedPhone} <span style={{ color: "var(--slate)" }}>· organizer</span></span>
+              <span className="rally-chip px-3 py-1 text-xs font-semibold"
+                style={inv.status === "declined" ? { color: "var(--danger)" } : { color: "var(--slate)" }}>
+                {inv.status === "declined" ? "Declined" : "Pending"}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {isOrganizer && spotsLeft > 0 ? (
         <div className="rally-card p-4 mb-5">
@@ -1817,6 +1853,7 @@ function EventsApp() {
   const [myEvents, setMyEvents] = useState([]);
   const [myInvites, setMyInvites] = useState([]);
   const [myOrganizerInvites, setMyOrganizerInvites] = useState([]);
+  const [inviteLoadError, setInviteLoadError] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -1870,12 +1907,22 @@ function EventsApp() {
       setMyInvites(invs);
       gotInvites = true;
       maybeReady();
-    }, () => { gotInvites = true; maybeReady(); });
+    }, (err) => {
+      console.error('watchMyPadelEventInvites failed:', err);
+      setInviteLoadError(true);
+      gotInvites = true;
+      maybeReady();
+    });
     const unsub3 = watchMyOrganizerInvites(profile.phone, (invs) => {
       setMyOrganizerInvites(invs);
       gotOrgInvites = true;
       maybeReady();
-    }, () => { gotOrgInvites = true; maybeReady(); });
+    }, (err) => {
+      console.error('watchMyOrganizerInvites failed:', err);
+      setInviteLoadError(true);
+      gotOrgInvites = true;
+      maybeReady();
+    });
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [uid, profile]);
 
@@ -2034,6 +2081,15 @@ function EventsApp() {
               onInvited={() => {}} onLeaveAsPlayer={handleLeaveAsPlayer} onRemoveParticipant={handleRemoveParticipant} />
       ) : (
         <div style={{ paddingTop: "1.25rem" }}>
+          {inviteLoadError ? (
+            <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "1rem" }}>
+              <div className="text-sm px-3 py-2.5 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+                Couldn't check for pending invitations — this usually means a one-time Firestore setup step
+                (a missing index) hasn't finished yet. Reloading in a minute often fixes it; if it doesn't,
+                check the browser console for a Firestore link to create the missing index.
+              </div>
+            </div>
+          ) : null}
           <InvitationsSection invites={myInvites} onAccept={handleAcceptInvite} onDecline={handleDeclineInvite}
             organizerInvites={myOrganizerInvites} onAcceptOrganizer={handleAcceptOrganizerInvite} onDeclineOrganizer={handleDeclineOrganizerInvite}
             busyId={inviteBusyId} />
