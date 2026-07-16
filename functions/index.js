@@ -252,6 +252,74 @@ exports.notifyOnPadelEventInviteResponse = onDocumentUpdated(
 );
 
 /* ============================================================
+   padelEvents — organizer invite notifications. Mirrors the pair
+   above exactly, pointed at organizerInvites instead of
+   padelInvites, since the two are deliberately separate
+   subcollections rather than one with a role field — see
+   firestore.rules for why.
+   ============================================================ */
+
+exports.notifyOnOrganizerInvite = onDocumentCreated(
+  { document: 'padelEvents/{eventId}/organizerInvites/{invitedPhone}', secrets: [vapidPrivateKey] },
+  async (snapshotEvent) => {
+    const invite = snapshotEvent.data ? snapshotEvent.data.data() : null;
+    if (!invite || !invite.invitedPhone) return;
+
+    const userSnap = await db.collection('users').where('phone', '==', invite.invitedPhone).limit(1).get();
+    if (userSnap.empty) return;
+
+    const inviteeUid = userSnap.docs[0].id;
+    const eventId = snapshotEvent.params.eventId;
+
+    const eventSnap = await db.collection('padelEvents').doc(eventId).get();
+    if (!eventSnap.exists) return;
+    const padelEvent = eventSnap.data();
+
+    const inviterName = (padelEvent.participantNames && padelEvent.participantNames[invite.invitedBy]) || 'Someone';
+    const where = [padelEvent.location, padelEvent.courts].filter(Boolean).join(' · ');
+    const body = `${inviterName} invited you to organize — ${formatWhen(padelEvent.dateTime)}${where ? ' · ' + where : ''}`;
+    const payload = JSON.stringify({ title: 'New organizer invite', body, url: './events.html' });
+
+    webpush.setVapidDetails('mailto:reminders@nextset.app', VAPID_PUBLIC_KEY, vapidPrivateKey.value());
+    await pushToUser(inviteeUid, payload);
+  },
+);
+
+exports.notifyOnOrganizerInviteResponse = onDocumentUpdated(
+  { document: 'padelEvents/{eventId}/organizerInvites/{invitedPhone}', secrets: [vapidPrivateKey] },
+  async (updateEvent) => {
+    const before = updateEvent.data && updateEvent.data.before ? updateEvent.data.before.data() : null;
+    const after = updateEvent.data && updateEvent.data.after ? updateEvent.data.after.data() : null;
+    if (!before || !after) return;
+    if (before.status !== 'pending' || (after.status !== 'accepted' && after.status !== 'declined')) return;
+
+    const inviterUid = after.invitedBy;
+    if (!inviterUid) return;
+
+    const eventId = updateEvent.params.eventId;
+    const label = after.invitedName || after.invitedPhone || 'Someone';
+    const verb = after.status === 'accepted' ? 'accepted' : 'declined';
+    let body = `${label} ${verb} your organizer invite`;
+
+    const eventSnap = await db.collection('padelEvents').doc(eventId).get();
+    if (eventSnap.exists) {
+      const padelEvent = eventSnap.data();
+      const where = [padelEvent.location, padelEvent.courts].filter(Boolean).join(' · ');
+      body += ` — ${formatWhen(padelEvent.dateTime)}${where ? ' · ' + where : ''}`;
+    }
+
+    const payload = JSON.stringify({
+      title: after.status === 'accepted' ? 'Organizer invite accepted' : 'Organizer invite declined',
+      body,
+      url: './events.html',
+    });
+
+    webpush.setVapidDetails('mailto:reminders@nextset.app', VAPID_PUBLIC_KEY, vapidPrivateKey.value());
+    await pushToUser(inviterUid, payload);
+  },
+);
+
+/* ============================================================
    Americano pairing engine — ported directly from rally.html
    (functions shuffle, pairKey, buildHistory, computeActiveCount,
    chooseSitOuts, pairHistoryScore, groupConflictScore,
