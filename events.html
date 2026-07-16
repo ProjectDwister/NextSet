@@ -507,6 +507,8 @@ import {
   removeOrganizer,
   removeSelfFromParticipants,
   removeParticipant,
+  addGuestPlayer,
+  editParticipantName,
   watchMyPadelEvents,
   sendPadelEventInvite,
   watchMyPadelEventInvites,
@@ -1140,6 +1142,29 @@ async function pickContactFromPhone(myPhone) {
   }
 }
 
+// Same reasoning as index.html's own nudge: this only ever builds a
+// WhatsApp "click to chat" link pre-filled with a message — the
+// inviter still has to tap send inside WhatsApp themselves, there's
+// no way to push a message on someone's behalf without WhatsApp's
+// Business API. Not automatic, just one tap shorter than typing the
+// whole thing by hand.
+function appUrlForSharing() {
+  return window.location.origin + window.location.pathname;
+}
+
+function buildEventInviteMessage(ev, invitedName, asOrganizer) {
+  const where = ev.location + (ev.courts ? ` (${ev.courts})` : "");
+  const role = asOrganizer ? "to help organize a padel event" : "to a padel event";
+  return `Hey${invitedName ? " " + invitedName : ""}! I've invited you ${role} — `
+    + `${formatEventWhen(ev)} at ${where}. Open ${appUrlForSharing()} and sign in with `
+    + `this number to see it and accept.`;
+}
+
+function buildWhatsAppLink(phone, message) {
+  const digits = phone.replace(/[^\d]/g, ""); // wa.me wants digits only, no '+'
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
 function formatEventWhen(ev) {
   const start = ev.dateTime.toDate ? ev.dateTime.toDate() : new Date(ev.dateTime);
   const end = new Date(start.getTime() + (ev.durationMin || 0) * 60000);
@@ -1154,19 +1179,36 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
   const [name, setName] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [lastPlayerInvite, setLastPlayerInvite] = useState(null);
 
   const [orgPhone, setOrgPhone] = useState("");
   const [orgName, setOrgName] = useState("");
   const [sendingOrgInvite, setSendingOrgInvite] = useState(false);
   const [orgError, setOrgError] = useState("");
+  const [lastOrgInvite, setLastOrgInvite] = useState(null);
+
   const [leaving, setLeaving] = useState(false);
   const [removingUid, setRemovingUid] = useState(null);
+
+  const [guestName, setGuestName] = useState("");
+  const [addingGuest, setAddingGuest] = useState(false);
+  const [guestError, setGuestError] = useState("");
+
+  const [editingUid, setEditingUid] = useState(null);
+  const [editNameValue, setEditNameValue] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const participants = Object.entries(event.participantNames || {});
   const organizers = event.organizers || [];
   const spotsLeft = event.capacity - (event.participants || []).length;
   const iAmParticipant = (event.participants || []).includes(myUid);
   const canPickContact = contactPickerSupported();
+
+  const whatsAppButtonStyle = {
+    display: "block", width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12,
+    background: "var(--court-blue)", color: "var(--court-blue-ink)", fontWeight: 600, fontSize: "0.9rem",
+    textAlign: "center", textDecoration: "none", marginTop: 10,
+  };
 
   const handlePickPlayerContact = async () => {
     const result = await pickContactFromPhone(myPhone);
@@ -1193,6 +1235,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
     setError("");
     try {
       await sendPadelEventInvite(eventId, digits, name.trim(), myUid);
+      setLastPlayerInvite({ phone: digits, name: name.trim() });
       setPhone("");
       setName("");
       onInvited();
@@ -1211,6 +1254,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
     setOrgError("");
     try {
       await sendOrganizerInvite(eventId, digits, orgName.trim(), myUid);
+      setLastOrgInvite({ phone: digits, name: orgName.trim() });
       setOrgPhone("");
       setOrgName("");
     } catch (e) {
@@ -1253,6 +1297,38 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
       await onRemoveParticipant(uid);
     } finally {
       setRemovingUid(null);
+    }
+  };
+
+  const handleAddGuest = async () => {
+    if (!guestName.trim()) return setGuestError("Enter a name.");
+    setAddingGuest(true);
+    setGuestError("");
+    try {
+      await addGuestPlayer(eventId, guestName.trim());
+      setGuestName("");
+    } catch (e) {
+      setGuestError(e && e.message ? e.message : "Could not add player.");
+    } finally {
+      setAddingGuest(false);
+    }
+  };
+
+  const startEditingName = (uid, currentName) => {
+    setEditingUid(uid);
+    setEditNameValue(currentName);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editNameValue.trim()) return;
+    setSavingEdit(true);
+    try {
+      await editParticipantName(eventId, editingUid, editNameValue.trim());
+      setEditingUid(null);
+    } catch (e) {
+      // rare in practice; the field just stays open to retry
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -1323,6 +1399,12 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
               style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}>
               {sendingOrgInvite ? "Sending…" : "Invite as organizer"}
             </button>
+            {lastOrgInvite ? (
+              <a href={buildWhatsAppLink(lastOrgInvite.phone, buildEventInviteMessage(event, lastOrgInvite.name, true))}
+                target="_blank" rel="noopener" style={whatsAppButtonStyle}>
+                Open WhatsApp to let them know
+              </a>
+            ) : null}
           </React.Fragment>
         ) : null}
       </div>
@@ -1339,9 +1421,28 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
         <div className="flex flex-wrap gap-1.5 mb-2">
           {participants.filter(([uid]) => (event.participants || []).includes(uid)).map(([uid, pname]) => {
             const canRemove = uid === myUid || isOrganizer;
+            if (editingUid === uid) {
+              return (
+                <span key={uid} className="flex items-center gap-1.5 px-2 py-1 rounded-full" style={{ background: "var(--card)", border: "1px solid var(--court-blue)" }}>
+                  <input type="text" value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} autoFocus
+                    style={{ width: "90px", background: "transparent", color: "var(--ink)", fontSize: "0.8rem", fontWeight: 600, border: "none", outline: "none" }} />
+                  <button type="button" onClick={handleSaveEdit} disabled={savingEdit}
+                    style={{ width: "auto", color: "var(--court-blue)", fontWeight: 700, fontSize: "0.8rem" }}>✓</button>
+                  <button type="button" onClick={() => setEditingUid(null)}
+                    style={{ width: "auto", color: "var(--slate)", fontWeight: 700, fontSize: "0.8rem" }}>&times;</button>
+                </span>
+              );
+            }
             return (
               <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
-                {pname}{organizers.includes(uid) ? " ★" : ""}
+                {isOrganizer ? (
+                  <button type="button" onClick={() => startEditingName(uid, pname)}
+                    style={{ width: "auto", color: "inherit", fontWeight: "inherit", fontSize: "inherit" }}>
+                    {pname}{organizers.includes(uid) ? " ★" : ""}
+                  </button>
+                ) : (
+                  <React.Fragment>{pname}{organizers.includes(uid) ? " ★" : ""}</React.Fragment>
+                )}
                 {canRemove ? (
                   <button type="button"
                     onClick={() => (uid === myUid ? handleLeaveAsPlayer() : handleRemoveParticipant(uid))}
@@ -1355,12 +1456,39 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
             );
           })}
         </div>
-        {iAmParticipant ? (
+        {isOrganizer ? (
           <div className="text-xs" style={{ color: "var(--slate)" }}>
-            Not playing after all? Tap the × on your own name{isOrganizer ? " — you'll stay an organizer." : "."}
+            Organizers can tap a name to edit it{iAmParticipant ? ", or the × on your own to stop playing." : "."}
+          </div>
+        ) : iAmParticipant ? (
+          <div className="text-xs" style={{ color: "var(--slate)" }}>
+            Not playing after all? Tap the × on your own name.
           </div>
         ) : null}
       </div>
+
+      {isOrganizer && spotsLeft > 0 ? (
+        <div className="rally-card p-4 mb-5">
+          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Add a player directly</div>
+          <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+            For anyone confirming offline — courtside or over a call. They're added straight away, no invite or app needed on their end. As an organizer, you can still edit or remove them later.
+          </div>
+          {guestError ? (
+            <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+              {guestError}
+            </div>
+          ) : null}
+          <div className="flex gap-2">
+            <input type="text" value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="Their name"
+              className="flex-1 px-3 py-2.5 rounded-lg text-sm"
+              style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+            <button type="button" onClick={handleAddGuest} disabled={addingGuest}
+              className="rally-btn-primary px-4 text-sm" style={{ width: "auto" }}>
+              {addingGuest ? "…" : "Add"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {isOrganizer ? (
         <div className="rally-card p-4 mb-5">
@@ -1388,6 +1516,12 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
           <button type="button" onClick={handleInvite} disabled={sending} className="rally-btn-primary w-full py-2.5 text-sm">
             {sending ? "Sending…" : "Send invite"}
           </button>
+          {lastPlayerInvite ? (
+            <a href={buildWhatsAppLink(lastPlayerInvite.phone, buildEventInviteMessage(event, lastPlayerInvite.name, false))}
+              target="_blank" rel="noopener" style={whatsAppButtonStyle}>
+              Open WhatsApp to let them know
+            </a>
+          ) : null}
         </div>
       ) : null}
     </div>

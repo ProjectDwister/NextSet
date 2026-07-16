@@ -116,6 +116,47 @@ export async function removeParticipant(eventId, targetUid) {
   });
 }
 
+// Adds someone directly, bypassing invite/accept entirely — for
+// players who confirmed offline (courtside, over a phone call) and
+// may never actually open the app. Given a synthetic id rather than
+// a real uid, since there's no account to link to; the draw-generation
+// engine doesn't care whether an id is a real Firebase uid or not, it
+// just needs a unique identifier per player, so this needs no changes
+// anywhere else. Organizer-only — enforced by the same broad update
+// rule that already governs every other participants-array change.
+export async function addGuestPlayer(eventId, name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) throw new Error('Enter a name.');
+  const snap = await getDoc(doc(db, PADEL_EVENTS, eventId));
+  if (!snap.exists()) throw new Error('This event no longer exists.');
+  const data = snap.data();
+  const participants = data.participants || [];
+  if (participants.length >= data.capacity) throw new Error('This event is already full.');
+  const guestId = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  await updateDoc(doc(db, PADEL_EVENTS, eventId), {
+    participants: [...participants, guestId],
+    participantNames: { ...(data.participantNames || {}), [guestId]: trimmed },
+    updatedAt: serverTimestamp(),
+  });
+  return guestId;
+}
+
+// Corrects a player's display name within this event — useful for
+// guest players especially, since they have no account of their own
+// to fix a typo with. Organizer-only in the UI; the rules already
+// permit any organizer to change participantNames freely.
+export async function editParticipantName(eventId, targetId, newName) {
+  const trimmed = (newName || '').trim();
+  if (!trimmed) throw new Error('Enter a name.');
+  const snap = await getDoc(doc(db, PADEL_EVENTS, eventId));
+  if (!snap.exists()) throw new Error('This event no longer exists.');
+  const data = snap.data();
+  await updateDoc(doc(db, PADEL_EVENTS, eventId), {
+    participantNames: { ...(data.participantNames || {}), [targetId]: trimmed },
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // Real-time list of every padelEvent the current user can act on —
 // either as a participant (playing) or an organizer (managing, whether
 // or not they're playing). These are two different fields, and
