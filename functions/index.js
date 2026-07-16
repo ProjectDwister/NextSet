@@ -471,7 +471,13 @@ function scheduleQualityScore(players, rounds) {
    guarantees the partnership layer, not who ends up facing
    whom — minimizing repeat opponents remains a secondary,
    best-effort goal, exactly as it already is everywhere else
-   in this file.
+   in this file. A third, separate layer on top of that decides
+   which specific court NUMBER each already-decided group of 4
+   plays on, so no individual player gets stuck on the same
+   physical court far more than the others — deliberately kept
+   as its own step, downstream of and never touching who's
+   partnered with whom or which pairs share a court, exactly as
+   requested.
    ============================================================ */
 
 function circleMethodPartnerships(playerIds, numRounds) {
@@ -523,29 +529,114 @@ function groupPairsIntoCourts(pairs, history, attempts = 80) {
   return best;
 }
 
-function generatePerfectAmericanoSchedule(players, numCourts, numRounds) {
+function permutations(arr) {
+  if (arr.length <= 1) return [arr];
+  const result = [];
+  for (let i = 0; i < arr.length; i++) {
+    const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+    permutations(rest).forEach((p) => result.push([arr[i], ...p]));
+  }
+  return result;
+}
+
+// Decides which court NUMBER each already-fixed group of 4 plays on
+// this round — never touches who's grouped with whom, only where.
+// numCourts is always small here (courts = players/4), so trying
+// every permutation is cheap (6 ways for 3 courts, 24 for 4, etc.);
+// falls back to a capped random sample only if numCourts is
+// unusually large.
+function assignCourtNumbers(groups, courtHistory, numCourts) {
+  const courtNumbers = Array.from({ length: numCourts }, (_, i) => i + 1);
+
+  function scoreOf(assignment) {
+    let score = 0;
+    assignment.forEach((court, groupIdx) => {
+      const [pairA, pairB] = groups[groupIdx];
+      [...pairA, ...pairB].forEach((id) => {
+        const c = (courtHistory[id] && courtHistory[id][court]) || 0;
+        score += c * c; // quadratic, same spirit as every other repeat penalty in this file
+      });
+    });
+    return score;
+  }
+
+  const candidates = numCourts <= 7
+    ? permutations(courtNumbers)
+    : Array.from({ length: 300 }, () => shuffle(courtNumbers));
+
+  let best = null;
+  let bestScore = Infinity;
+  candidates.forEach((assignment) => {
+    const s = scoreOf(assignment);
+    if (s < bestScore) { bestScore = s; best = assignment; }
+  });
+  return best;
+}
+
+function courtBalanceScore(players, numCourts, rounds) {
+  const numRounds = rounds.length;
+  const ideal = numRounds / numCourts;
+  const courtCounts = {};
+  players.forEach((p) => { courtCounts[p.id] = {}; });
+  rounds.forEach((round) => {
+    round.courts.forEach((c) => {
+      [...c.teamA, ...c.teamB].forEach((id) => {
+        courtCounts[id][c.court] = (courtCounts[id][c.court] || 0) + 1;
+      });
+    });
+  });
+  let score = 0;
+  players.forEach((p) => {
+    for (let c = 1; c <= numCourts; c++) {
+      const actual = courtCounts[p.id][c] || 0;
+      score += (actual - ideal) * (actual - ideal);
+    }
+  });
+  return score;
+}
+
+function buildOnePerfectAttempt(players, numCourts, numRounds, partnershipRounds) {
+  const ids = players.map((p) => p.id);
+  const courtHistory = {};
+  ids.forEach((id) => { courtHistory[id] = {}; });
+
+  const rounds = [];
+  partnershipRounds.forEach((pairs) => {
+    const history = buildHistory(players, rounds);
+    const courtGroups = groupPairsIntoCourts(pairs, history); // WHO plays WHOM — decided first, unaffected by court balancing
+    const courtNumberAssignment = assignCourtNumbers(courtGroups, courtHistory, numCourts); // WHICH court number — decided second
+
+    const courts = courtGroups.map(([pairA, pairB], idx) => {
+      const courtNum = courtNumberAssignment[idx];
+      [...pairA, ...pairB].forEach((id) => {
+        courtHistory[id][courtNum] = (courtHistory[id][courtNum] || 0) + 1;
+      });
+      return { court: courtNum, teamA: pairA, teamB: pairB, scoreA: null, scoreB: null };
+    });
+    courts.sort((a, b) => a.court - b.court);
+    rounds.push({ courts, sittingOut: [] });
+  });
+  return rounds;
+}
+
+function generatePerfectAmericanoSchedule(players, numCourts, numRounds, balanceAttempts = 200) {
   const n = players.length;
   if (n % 4 !== 0) return null; // needs to divide evenly into courts — this construction doesn't handle sit-outs
   if (numRounds !== n - 1) return null; // only exact for this specific round count
   if (numCourts !== n / 4) return null; // must actually use every player, every round
 
   const ids = players.map((p) => p.id);
-  const partnershipRounds = circleMethodPartnerships(ids, numRounds);
+  const partnershipRounds = circleMethodPartnerships(ids, numRounds); // fixed once — every attempt below shares the exact same partnerships
 
-  const rounds = [];
-  partnershipRounds.forEach((pairs) => {
-    const history = buildHistory(players, rounds);
-    const courtGroups = groupPairsIntoCourts(pairs, history);
-    const courts = courtGroups.map(([pairA, pairB], idx) => ({
-      court: idx + 1,
-      teamA: pairA,
-      teamB: pairB,
-      scoreA: null,
-      scoreB: null,
-    }));
-    rounds.push({ courts, sittingOut: [] });
-  });
-  return rounds;
+  let best = null;
+  let bestScore = Infinity;
+  for (let attempt = 0; attempt < balanceAttempts; attempt++) {
+    const rounds = buildOnePerfectAttempt(players, numCourts, numRounds, partnershipRounds);
+    const score = courtBalanceScore(players, numCourts, rounds);
+    if (score < bestScore) { bestScore = score; best = rounds; }
+    if (bestScore === 0) break;
+  }
+  return best;
 }
 
 function generateFullAmericanoSchedule(players, numCourts, numRounds, scheduleAttempts = 12) {
