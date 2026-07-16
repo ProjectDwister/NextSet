@@ -102,6 +102,20 @@ export async function removeSelfFromParticipants(eventId, myUid) {
   });
 }
 
+// The organizer-facing counterpart — removes any given player, not
+// just yourself. Security rules already permit this (any organizer
+// can change participants freely); this just exposes it as its own
+// explicit action rather than only ever being used for self-removal.
+export async function removeParticipant(eventId, targetUid) {
+  const snap = await getDoc(doc(db, PADEL_EVENTS, eventId));
+  if (!snap.exists()) throw new Error('This event no longer exists.');
+  const participants = (snap.data().participants || []).filter((id) => id !== targetUid);
+  await updateDoc(doc(db, PADEL_EVENTS, eventId), {
+    participants,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // Real-time list of every padelEvent the current user can act on —
 // either as a participant (playing) or an organizer (managing, whether
 // or not they're playing). These are two different fields, and

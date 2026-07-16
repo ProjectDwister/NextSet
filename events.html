@@ -506,6 +506,7 @@ import {
   addOrganizer,
   removeOrganizer,
   removeSelfFromParticipants,
+  removeParticipant,
   watchMyPadelEvents,
   sendPadelEventInvite,
   watchMyPadelEventInvites,
@@ -1106,6 +1107,39 @@ function CreateEventForm({ onCreate, creating, error }) {
   );
 }
 
+// Contact Picker API — same feature detection, same E.164 best-guess
+// logic as index.html's own invite flow, ported over rather than
+// reimplemented. Real support is Chrome/Android only; every other
+// browser just falls back to typing the number by hand.
+function contactPickerSupported() {
+  return "contacts" in navigator && "ContactsManager" in window;
+}
+
+function guessE164(rawTel, myPhone) {
+  let digits = rawTel.replace(/[^\d+]/g, "");
+  if (digits.startsWith("+")) return digits;
+  const match = myPhone && myPhone.match(/^\+(\d{1,3})/);
+  if (!match) return digits;
+  digits = digits.replace(/^0+/, "");
+  return `+${match[1]}${digits}`;
+}
+
+async function pickContactFromPhone(myPhone) {
+  try {
+    const contacts = await navigator.contacts.select(["name", "tel"], { multiple: false });
+    if (!contacts || !contacts.length) return null; // backed out of the picker
+    const chosen = contacts[0];
+    const rawTel = chosen.tel && chosen.tel[0];
+    if (!rawTel) return { error: "That contact doesn't have a phone number saved." };
+    return {
+      phone: guessE164(rawTel, myPhone),
+      name: (chosen.name && chosen.name[0]) || "",
+    };
+  } catch (e) {
+    return null; // dismissed or blocked
+  }
+}
+
 function formatEventWhen(ev) {
   const start = ev.dateTime.toDate ? ev.dateTime.toDate() : new Date(ev.dateTime);
   const end = new Date(start.getTime() + (ev.durationMin || 0) * 60000);
@@ -1115,7 +1149,7 @@ function formatEventWhen(ev) {
   return `${dayStr} · ${startStr} – ${endStr}`;
 }
 
-function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganizerChange, onLeaveAsPlayer }) {
+function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, onOrganizerChange, onLeaveAsPlayer, onRemoveParticipant }) {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [sending, setSending] = useState(false);
@@ -1126,11 +1160,31 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
   const [sendingOrgInvite, setSendingOrgInvite] = useState(false);
   const [orgError, setOrgError] = useState("");
   const [leaving, setLeaving] = useState(false);
+  const [removingUid, setRemovingUid] = useState(null);
 
   const participants = Object.entries(event.participantNames || {});
   const organizers = event.organizers || [];
   const spotsLeft = event.capacity - (event.participants || []).length;
   const iAmParticipant = (event.participants || []).includes(myUid);
+  const canPickContact = contactPickerSupported();
+
+  const handlePickPlayerContact = async () => {
+    const result = await pickContactFromPhone(myPhone);
+    if (!result) return;
+    if (result.error) { setError(result.error); return; }
+    setError("");
+    setPhone(result.phone);
+    setName(result.name);
+  };
+
+  const handlePickOrganizerContact = async () => {
+    const result = await pickContactFromPhone(myPhone);
+    if (!result) return;
+    if (result.error) { setOrgError(result.error); return; }
+    setOrgError("");
+    setOrgPhone(result.phone);
+    setOrgName(result.name);
+  };
 
   const handleInvite = async () => {
     const digits = phone.replace(/[^0-9+]/g, "");
@@ -1193,6 +1247,15 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
     }
   };
 
+  const handleRemoveParticipant = async (uid) => {
+    setRemovingUid(uid);
+    try {
+      await onRemoveParticipant(uid);
+    } finally {
+      setRemovingUid(null);
+    }
+  };
+
   return (
     <div className="max-w-xl mx-auto px-4 pb-28">
       <div className="rally-display text-xl mb-1" style={{ color: "var(--ink)" }}>
@@ -1204,7 +1267,7 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
       <div className="rally-card p-4 mb-5">
         <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizers</div>
         <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
-          Up to 4. Organizers can invite, add players, edit, and manage scoring — whether or not they're playing.
+          Up to 4. Only organizers can invite, add, edit, or remove players, and manage scoring — whether or not they're playing themselves.
         </div>
         {orgError ? (
           <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
@@ -1240,6 +1303,13 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
             <div className="text-xs font-semibold mb-2" style={{ color: "var(--slate)" }}>
               Or invite someone by phone — they don't need to be a player
             </div>
+            {canPickContact ? (
+              <button type="button" onClick={handlePickOrganizerContact}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg mb-2"
+                style={{ width: "auto", border: "1px solid var(--line)", color: "var(--slate)" }}>
+                Pick from contacts
+              </button>
+            ) : null}
             <div className="flex gap-2 mb-2">
               <input type="tel" value={orgPhone} onChange={(e) => setOrgPhone(e.target.value)} placeholder="+91..."
                 className="flex-1 px-3 py-2.5 rounded-lg text-sm"
@@ -1267,15 +1337,23 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5 mb-2">
-          {participants.filter(([uid]) => (event.participants || []).includes(uid)).map(([uid, pname]) => (
-            <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
-              {pname}{organizers.includes(uid) ? " ★" : ""}
-              {uid === myUid ? (
-                <button type="button" onClick={handleLeaveAsPlayer} disabled={leaving}
-                  style={{ width: "auto", color: "var(--danger)", fontWeight: 700 }} aria-label="Remove yourself as a player">&times;</button>
-              ) : null}
-            </span>
-          ))}
+          {participants.filter(([uid]) => (event.participants || []).includes(uid)).map(([uid, pname]) => {
+            const canRemove = uid === myUid || isOrganizer;
+            return (
+              <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
+                {pname}{organizers.includes(uid) ? " ★" : ""}
+                {canRemove ? (
+                  <button type="button"
+                    onClick={() => (uid === myUid ? handleLeaveAsPlayer() : handleRemoveParticipant(uid))}
+                    disabled={leaving || removingUid === uid}
+                    style={{ width: "auto", color: "var(--danger)", fontWeight: 700 }}
+                    aria-label={uid === myUid ? "Remove yourself as a player" : `Remove ${pname} as a player`}>
+                    &times;
+                  </button>
+                ) : null}
+              </span>
+            );
+          })}
         </div>
         {iAmParticipant ? (
           <div className="text-xs" style={{ color: "var(--slate)" }}>
@@ -1291,6 +1369,13 @@ function EventNotFull({ event, eventId, myUid, isOrganizer, onInvited, onOrganiz
             <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
               {error}
             </div>
+          ) : null}
+          {canPickContact ? (
+            <button type="button" onClick={handlePickPlayerContact}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg mb-2"
+              style={{ width: "auto", border: "1px solid var(--line)", color: "var(--slate)" }}>
+              Pick from contacts
+            </button>
           ) : null}
           <div className="flex gap-2 mb-2">
             <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91..."
@@ -1326,7 +1411,7 @@ function EventTeamLabel({ players, ids, winning, align = "left" }) {
   );
 }
 
-function EventCourtCard({ court, players, onScoreChange }) {
+function EventCourtCard({ court, players, onScoreChange, editable }) {
   const aHas = court.scoreA != null;
   const bHas = court.scoreB != null;
   const aWins = aHas && bHas && court.scoreA > court.scoreB;
@@ -1337,6 +1422,18 @@ function EventCourtCard({ court, players, onScoreChange }) {
     onScoreChange(field, raw === "" ? null : parseInt(raw, 10));
   };
 
+  const ScoreDisplay = ({ value, field, ariaLabel }) => (
+    editable ? (
+      <input inputMode="numeric" pattern="[0-9]*" className="rally-score-input rally-tabular"
+        value={value == null ? "" : String(value)} onChange={handleChange(field)}
+        placeholder="0" aria-label={ariaLabel} />
+    ) : (
+      <span className="rally-score-input rally-tabular" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {value == null ? "–" : value}
+      </span>
+    )
+  );
+
   return (
     <div className="rally-court-card p-4">
       <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--court-blue-ink)", opacity: 0.75 }}>
@@ -1344,22 +1441,18 @@ function EventCourtCard({ court, players, onScoreChange }) {
       </div>
       <div className="flex items-center justify-between gap-3">
         <EventTeamLabel players={players} ids={court.teamA} winning={aWins} />
-        <input inputMode="numeric" pattern="[0-9]*" className="rally-score-input rally-tabular"
-          value={court.scoreA == null ? "" : String(court.scoreA)} onChange={handleChange("scoreA")}
-          placeholder="0" aria-label="Team A score" />
+        <ScoreDisplay value={court.scoreA} field="scoreA" ariaLabel="Team A score" />
       </div>
       <div className="rally-net-line my-3" />
       <div className="flex items-center justify-between gap-3">
-        <input inputMode="numeric" pattern="[0-9]*" className="rally-score-input rally-tabular"
-          value={court.scoreB == null ? "" : String(court.scoreB)} onChange={handleChange("scoreB")}
-          placeholder="0" aria-label="Team B score" />
+        <ScoreDisplay value={court.scoreB} field="scoreB" ariaLabel="Team B score" />
         <EventTeamLabel players={players} ids={court.teamB} winning={bWins} align="right" />
       </div>
     </div>
   );
 }
 
-function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, expanded, onToggle, pointsTarget, eventId }) {
+function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, expanded, onToggle, pointsTarget, eventId, editable }) {
   const complete = roundIsComplete(round);
   return (
     <div className="mb-4 rally-fade-in">
@@ -1382,7 +1475,7 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
           <div className="text-xs mt-3 mb-3 px-1" style={{ color: "var(--slate)" }}>Playing to {pointsTarget} pts</div>
           <div className="grid gap-3 sm:grid-cols-2">
             {round.courts.map((court) => (
-              <EventCourtCard key={court.court} court={court} players={players}
+              <EventCourtCard key={court.court} court={court} players={players} editable={editable}
                 onScoreChange={(field, value) => {
                   dispatch({ roundIndex, court: court.court, field, value });
                   syncPadelScoreField(eventId, roundIndex, court.court, field, value);
@@ -1447,7 +1540,7 @@ function EventStandings({ tournament }) {
   );
 }
 
-function EventFull({ event, eventId }) {
+function EventFull({ event, eventId, isOrganizer }) {
   const [tournament, setTournament] = useState(null);
   const [activeTab, setActiveTab] = useState("play");
   const [expandedIdx, setExpandedIdx] = useState(0);
@@ -1482,6 +1575,11 @@ function EventFull({ event, eventId }) {
 
   return (
     <div className="max-w-xl mx-auto px-4 pb-28">
+      {!isOrganizer ? (
+        <div className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: "var(--chalk)", color: "var(--slate)" }}>
+          Only organizers can update scores — you're viewing live.
+        </div>
+      ) : null}
       <div className="flex gap-2 mb-5 rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--line)", padding: "0.25rem" }}>
         <button type="button" onClick={() => setActiveTab("play")}
           className={"rally-tab-btn flex-1 py-2 text-sm" + (activeTab === "play" ? " active" : "")}>
@@ -1498,7 +1596,7 @@ function EventFull({ event, eventId }) {
           <EventRoundBlock key={idx} round={round} roundIndex={idx} totalRounds={tournament.rounds.length}
             players={tournament.players} dispatch={dispatch} expanded={expandedIdx === idx}
             onToggle={() => setExpandedIdx(expandedIdx === idx ? -1 : idx)}
-            pointsTarget={tournament.pointsTarget} eventId={eventId} />
+            pointsTarget={tournament.pointsTarget} eventId={eventId} editable={isOrganizer} />
         ))
       ) : (
         <EventStandings tournament={tournament} />
@@ -1735,6 +1833,11 @@ function EventsApp() {
     await removeSelfFromParticipants(selectedId, uid);
   }
 
+  async function handleRemoveParticipant(targetUid) {
+    if (!selectedId) return;
+    await removeParticipant(selectedId, targetUid);
+  }
+
   if (!authChecked || !loaded) {
     return (
       <div className="rally-root flex items-center justify-center" style={{ minHeight: "60vh" }}>
@@ -1792,9 +1895,9 @@ function EventsApp() {
 
       {selectedEvent ? (
         selectedEvent.drawGenerated
-          ? <EventFull event={selectedEvent} eventId={selectedEvent.id} />
-          : <EventNotFull event={selectedEvent} eventId={selectedEvent.id} myUid={uid} isOrganizer={isOrganizer}
-              onInvited={() => {}} onLeaveAsPlayer={handleLeaveAsPlayer} />
+          ? <EventFull event={selectedEvent} eventId={selectedEvent.id} isOrganizer={isOrganizer} />
+          : <EventNotFull event={selectedEvent} eventId={selectedEvent.id} myUid={uid} myPhone={profile.phone} isOrganizer={isOrganizer}
+              onInvited={() => {}} onLeaveAsPlayer={handleLeaveAsPlayer} onRemoveParticipant={handleRemoveParticipant} />
       ) : (
         <div style={{ paddingTop: "1.25rem" }}>
           <InvitationsSection invites={myInvites} onAccept={handleAcceptInvite} onDecline={handleDeclineInvite}
