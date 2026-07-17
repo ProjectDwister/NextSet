@@ -1,0 +1,14 @@
+# Dependencies — installed locally by npm, never committed. Applies
+# wherever a node_modules folder shows up (functions/, and now
+# firestore-rules-tests/), not just at the repo root.
+node_modules/
+
+# OS-generated clutter
+.DS_Store
+Thumbs.db
+
+# Local environment files, if any ever get created — nothing currently
+# uses one, this is just a standard precaution against secrets
+# accidentally landing in a public repo
+.env
+.env.local
