@@ -1,6 +1,6 @@
 // Bump this whenever the app-shell file list below changes; old caches
 // get cleaned up automatically on activate.
-const CACHE_NAME = 'nextset-v13';
+const CACHE_NAME = 'nextset-v14';
 
 const APP_SHELL = [
   './index.html',
