@@ -1,0 +1,13 @@
+{
+  "name": "firestore-rules-tests",
+  "description": "Automated tests for firestore.rules, run against the local Firebase emulator — never deployed, never part of the app itself.",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore \"jest\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "jest": "^29.7.0"
+  }
+}

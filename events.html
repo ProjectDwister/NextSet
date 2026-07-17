@@ -510,6 +510,7 @@ import {
   addGuestPlayer,
   editParticipantName,
   watchMyPadelEvents,
+  watchAllPadelEventsForAdmin,
   sendPadelEventInvite,
   watchMyPadelEventInvites,
   declinePadelEventInvite,
@@ -522,6 +523,8 @@ import {
   acceptOrganizerInvite,
   watchSentPadelInvites,
   watchSentOrganizerInvites,
+  regenerateDraw,
+  deletePadelEvent,
 } from './padelEvents.js';
 
 const { useEffect, useMemo, useState } = React;
@@ -1715,11 +1718,27 @@ function EventFull({ event, eventId, isOrganizer }) {
   const [activeTab, setActiveTab] = useState("play");
   const [expandedIdx, setExpandedIdx] = useState(0);
   const [, forceRender] = useState(0);
+  const [confirmingRegen, setConfirmingRegen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState("");
 
   useEffect(() => {
     const unsub = watchPadelTournament(eventId, (t) => setTournament(t), () => {});
     return () => unsub();
   }, [eventId]);
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    setRegenError("");
+    try {
+      await regenerateDraw(eventId);
+      setConfirmingRegen(false);
+    } catch (e) {
+      setRegenError(e && e.message ? e.message : "Could not regenerate the draw.");
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   if (!tournament) {
     return (
@@ -1771,15 +1790,47 @@ function EventFull({ event, eventId, isOrganizer }) {
       ) : (
         <EventStandings tournament={tournament} />
       )}
+
+      {isOrganizer ? (
+        <div className="rally-card p-4 mt-2" style={{ marginTop: "1.5rem" }}>
+          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Regenerate draw</div>
+          <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+            Makes a fresh draw for everyone currently in the event — useful if someone dropped out and was
+            replaced. This clears every score entered so far; there's no undo.
+          </div>
+          {regenError ? (
+            <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+              {regenError}
+            </div>
+          ) : null}
+          {confirmingRegen ? (
+            <div className="flex gap-2">
+              <button type="button" onClick={handleRegenerate} disabled={regenerating}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "var(--danger)", color: "#fff" }}>
+                {regenerating ? "Regenerating…" : "Yes, regenerate"}
+              </button>
+              <button type="button" onClick={() => setConfirmingRegen(false)} disabled={regenerating}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setConfirmingRegen(true)}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}>
+              Regenerate draw
+            </button>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function EventsList({ events, onSelect }) {
+function EventsList({ events, onSelect, title = "Your events" }) {
   return (
     <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "1.5rem" }}>
       <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>
-        Your events
+        {title}
       </div>
       {events.map((ev) => (
         <button key={ev.id} type="button" onClick={() => onSelect(ev.id)}
@@ -1853,6 +1904,10 @@ function EventsApp() {
   const [myEvents, setMyEvents] = useState([]);
   const [myInvites, setMyInvites] = useState([]);
   const [myOrganizerInvites, setMyOrganizerInvites] = useState([]);
+  const [adminEvents, setAdminEvents] = useState(null); // null = not an admin (or not yet known); array = admin, here's everything
+  const [confirmingDeleteEvent, setConfirmingDeleteEvent] = useState(false);
+  const [deletingEvent, setDeletingEvent] = useState(false);
+  const [deleteEventError, setDeleteEventError] = useState("");
   const [inviteLoadError, setInviteLoadError] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -1926,6 +1981,19 @@ function EventsApp() {
     });
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [uid, profile]);
+
+  // Attempted unconditionally for every signed-in user — there's no
+  // way to check "am I an admin" ahead of time, so this just runs and
+  // quietly does nothing for everyone it's not meant for. Only ever
+  // succeeds for the one account marked in the admins collection.
+  useEffect(() => {
+    if (!uid) return;
+    const unsub = watchAllPadelEventsForAdmin(
+      (evs) => setAdminEvents(evs),
+      () => setAdminEvents(null),
+    );
+    return () => unsub();
+  }, [uid]);
 
   function applyTheme(next) {
     const normalized = next === "light" ? "light" : "dark";
@@ -2024,6 +2092,21 @@ function EventsApp() {
     await removeParticipant(selectedId, targetUid);
   }
 
+  async function handleDeleteEvent() {
+    if (!selectedId) return;
+    setDeletingEvent(true);
+    setDeleteEventError("");
+    try {
+      await deletePadelEvent(selectedId);
+      setSelectedId(null);
+      setConfirmingDeleteEvent(false);
+    } catch (e) {
+      setDeleteEventError(e && e.message ? e.message : "Could not delete this event.");
+    } finally {
+      setDeletingEvent(false);
+    }
+  }
+
   if (!authChecked || !loaded) {
     return (
       <div className="rally-root flex items-center justify-center" style={{ minHeight: "60vh" }}>
@@ -2084,7 +2167,42 @@ function EventsApp() {
           ? <EventFull event={selectedEvent} eventId={selectedEvent.id} isOrganizer={isOrganizer} />
           : <EventNotFull event={selectedEvent} eventId={selectedEvent.id} myUid={uid} myPhone={profile.phone} isOrganizer={isOrganizer}
               onInvited={() => {}} onLeaveAsPlayer={handleLeaveAsPlayer} onRemoveParticipant={handleRemoveParticipant} />
-      ) : (
+      ) : null}
+
+      {selectedEvent && isOrganizer ? (
+        <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "2rem" }}>
+          <div className="rally-card p-4" style={{ borderColor: "var(--danger)" }}>
+            <div className="text-sm font-bold mb-1" style={{ color: "var(--danger)" }}>Delete this event</div>
+            <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+              Removes the event, every invite sent, and the draw if one exists. Nobody can undo this — including you.
+            </div>
+            {deleteEventError ? (
+              <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+                {deleteEventError}
+              </div>
+            ) : null}
+            {confirmingDeleteEvent ? (
+              <div className="flex gap-2">
+                <button type="button" onClick={handleDeleteEvent} disabled={deletingEvent}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "var(--danger)", color: "#fff" }}>
+                  {deletingEvent ? "Deleting…" : "Yes, delete permanently"}
+                </button>
+                <button type="button" onClick={() => setConfirmingDeleteEvent(false)} disabled={deletingEvent}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setConfirmingDeleteEvent(true)}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--danger)", color: "var(--danger)" }}>
+                Delete event
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {!selectedEvent ? (
         <div style={{ paddingTop: "1.25rem" }}>
           {inviteLoadError ? (
             <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "1rem" }}>
@@ -2107,6 +2225,21 @@ function EventsApp() {
             busyId={inviteBusyId} />
 
           {myEvents.length ? <EventsList events={myEvents} onSelect={setSelectedId} /> : null}
+
+          {adminEvents && adminEvents.filter((ev) => !myEvents.some((mine) => mine.id === ev.id)).length ? (
+            <div>
+              <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "0.5rem" }}>
+                <div className="text-xs" style={{ color: "var(--slate)" }}>
+                  Visible to you as an admin — you're not a player or organizer of these, viewing only.
+                </div>
+              </div>
+              <EventsList
+                events={adminEvents.filter((ev) => !myEvents.some((mine) => mine.id === ev.id))}
+                onSelect={setSelectedId}
+                title="All events"
+              />
+            </div>
+          ) : null}
 
           <div className="max-w-xl mx-auto px-4">
             {myEvents.length ? (

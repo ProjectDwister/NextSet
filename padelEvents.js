@@ -5,6 +5,7 @@ import {
   addDoc,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -53,8 +54,26 @@ export async function updatePadelEvent(eventId, fields) {
   return updateDoc(doc(db, PADEL_EVENTS, eventId), { ...fields, updatedAt: serverTimestamp() });
 }
 
+// Client-side deletes never cascade to subcollections — that's a
+// Firestore-wide limitation, not specific to this app (only deleting
+// through the console's own UI does that automatically). So this
+// explicitly cleans up everything nested under the event first —
+// every padelInvites and organizerInvites document, plus the
+// tournament draw if one was ever generated — before deleting the
+// event document itself. Leaving those orphaned wouldn't break
+// anything visibly, but they'd sit there indefinitely otherwise.
 export async function deletePadelEvent(eventId) {
-  return deleteDoc(doc(db, PADEL_EVENTS, eventId));
+  const [padelInvites, organizerInvites] = await Promise.all([
+    getDocs(collection(db, PADEL_EVENTS, eventId, 'padelInvites')),
+    getDocs(collection(db, PADEL_EVENTS, eventId, 'organizerInvites')),
+  ]);
+  const deletions = [
+    ...padelInvites.docs.map((d) => deleteDoc(d.ref)),
+    ...organizerInvites.docs.map((d) => deleteDoc(d.ref)),
+    deleteDoc(doc(db, PADEL_EVENTS, eventId, 'tournament', 'draw')).catch(() => {}), // fine if it never existed
+  ];
+  await Promise.all(deletions);
+  await deleteDoc(doc(db, PADEL_EVENTS, eventId));
 }
 
 // Add or remove an organizer. The 4-organizer cap is enforced by the
@@ -198,6 +217,25 @@ export function watchMyPadelEvents(myUid, onChange, onError) {
   return () => { unsub1(); unsub2(); };
 }
 
+// Unfiltered query across every event — only ever succeeds for an
+// actual admin. The client has no way to check "am I an admin" ahead
+// of time (the admins collection is deliberately allow read,write: if
+// false, unreachable from any client), so this is attempted
+// unconditionally and simply fails silently for everyone else, same
+// as attempting any action you don't have permission for. Permitted
+// by the rules specifically because isAdmin() doesn't depend on
+// resource.data at all — it's true or false purely based on the
+// caller, which Firestore can verify holds for every possible
+// document a query like this could return, without needing a
+// matching where() clause the way data-dependent rules do.
+export function watchAllPadelEventsForAdmin(onChange, onError) {
+  return onSnapshot(
+    collection(db, PADEL_EVENTS),
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    onError,
+  );
+}
+
 export async function sendPadelEventInvite(eventId, invitedPhone, invitedName, myUid) {
   await setDoc(doc(db, PADEL_EVENTS, eventId, 'padelInvites', invitedPhone), {
     invitedBy: myUid,
@@ -292,6 +330,32 @@ export function watchSentOrganizerInvites(eventId, onChange, onError) {
 
 // Live view of the generated draw, once one exists. Null until the
 // Cloud Function creates it (participants.length reaching capacity).
+// Organizer-only. Resets the same flag generateDrawOnFull already
+// watches for — participants.length >= capacity && !drawGenerated —
+// so simply flipping this back to false re-fires the exact same
+// Cloud Function trigger that made the draw the first time, rather
+// than needing a second, separate generation path to build and keep
+// in sync with the first. Deliberately does NOT touch participants —
+// regenerating is for "someone dropped out, redo the pairings for
+// who's actually here now," not a way to also remove players; that
+// stays a separate, explicit action. Guarded against being called
+// while under capacity — the Cloud Function's own guard would
+// otherwise silently do nothing in that case, leaving drawGenerated
+// false with no new draw actually generated, an inconsistent state
+// worth preventing here rather than discovering later.
+export async function regenerateDraw(eventId) {
+  const snap = await getDoc(doc(db, PADEL_EVENTS, eventId));
+  if (!snap.exists()) throw new Error('This event no longer exists.');
+  const data = snap.data();
+  if ((data.participants || []).length < data.capacity) {
+    throw new Error('Not enough players right now — add someone to fill the spot before regenerating.');
+  }
+  await updateDoc(doc(db, PADEL_EVENTS, eventId), {
+    drawGenerated: false,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export function watchPadelTournament(eventId, onChange, onError) {
   return onSnapshot(
     doc(db, PADEL_EVENTS, eventId, 'tournament', 'draw'),
