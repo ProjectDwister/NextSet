@@ -773,10 +773,28 @@ exports.generateDrawOnFull = onDocumentUpdated(
     const numRounds = after.numRounds || 7;
     const rounds = generateFullAmericanoSchedule(players, numCourts, numRounds) || [];
 
-    await eventRef.collection('tournament').doc('draw').set({
+    // Split across two documents rather than one: fullDraw holds every
+    // round the moment it's generated, readable only by organizers —
+    // that's what "only I can see all 11 rounds upfront" actually
+    // means at the data layer, not just something the UI hides. draw
+    // is what every participant actually reads, and starts with just
+    // round 1; revealNextRoundOnComplete (below) is what grows it one
+    // round at a time as each round finishes. The generation itself —
+    // the actual pairing logic — runs exactly once, right here, same
+    // as before; this only changes where the result gets written.
+    await eventRef.collection('tournament').doc('fullDraw').set({
       format: 'americano',
       players,
       rounds,
+      numCourts,
+      pointsTarget: after.pointsTarget || 24,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await eventRef.collection('tournament').doc('draw').set({
+      format: 'americano',
+      players,
+      rounds: rounds.slice(0, 1),
       numCourts,
       pointsTarget: after.pointsTarget || 24,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -795,3 +813,68 @@ exports.generateDrawOnFull = onDocumentUpdated(
     }
   },
 );
+
+function roundIsFullyScored(round) {
+  if (!round || !round.courts || !round.courts.length) return false;
+  return round.courts.every((c) => c.scoreA != null && c.scoreB != null);
+}
+
+// The other half of "everyone else sees it unravel round by round" —
+// generateDrawOnFull above only ever writes round 1 into draw; this is
+// what grows it one round at a time from there, each time whatever is
+// currently the last round in draw becomes fully scored. Organizers
+// already see every round via fullDraw regardless of what this does;
+// this only ever affects what non-organizer participants can read.
+exports.revealNextRoundOnComplete = onDocumentUpdated(
+  { document: 'padelEvents/{eventId}/tournament/draw', secrets: [vapidPrivateKey] },
+  async (updateEvent) => {
+    const after = updateEvent.data && updateEvent.data.after ? updateEvent.data.after.data() : null;
+    if (!after || !after.rounds || !after.rounds.length) return;
+
+    const lastRound = after.rounds[after.rounds.length - 1];
+    if (!roundIsFullyScored(lastRound)) return;
+
+    const eventId = updateEvent.params.eventId;
+    const tournamentRef = db.collection('padelEvents').doc(eventId).collection('tournament');
+    const fullDrawSnap = await tournamentRef.doc('fullDraw').get();
+    if (!fullDrawSnap.exists) return; // shouldn't happen, but nothing to reveal from if it did
+    const fullRounds = fullDrawSnap.data().rounds || [];
+
+    const nextIndex = after.rounds.length;
+    if (nextIndex >= fullRounds.length) return; // that was the last round — nothing left to reveal
+
+    // Transaction guard against a retried delivery double-appending —
+    // re-checks the round count is still exactly what triggered this
+    // before writing, same pattern as the claim-transaction in
+    // generateDrawOnFull above.
+    const drawRef = tournamentRef.doc('draw');
+    const appended = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(drawRef);
+      if (!snap.exists) return false;
+      const current = snap.data();
+      if (!current.rounds || current.rounds.length !== nextIndex) return false; // already appended by another invocation
+      tx.update(drawRef, {
+        rounds: [...current.rounds, fullRounds[nextIndex]],
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
+    if (!appended) return;
+
+    const eventSnap = await db.collection('padelEvents').doc(eventId).get();
+    if (!eventSnap.exists) return;
+    const padelEvent = eventSnap.data();
+    const participants = padelEvent.participants || [];
+
+    webpush.setVapidDetails('mailto:reminders@nextset.app', VAPID_PUBLIC_KEY, vapidPrivateKey.value());
+    const payload = JSON.stringify({
+      title: `Round ${nextIndex + 1} is up`,
+      body: `Round ${nextIndex} is done — the next round is ready.`,
+      url: './events.html',
+    });
+    for (const uid of participants) {
+      await pushToUser(uid, payload);
+    }
+  },
+);
+
