@@ -816,7 +816,12 @@ exports.generateDrawOnFull = onDocumentUpdated(
 
 function roundIsFullyScored(round) {
   if (!round || !round.courts || !round.courts.length) return false;
-  return round.courts.every((c) => c.scoreA != null && c.scoreB != null);
+  // Mirrors courtScoreIsFinal in events.html: confirmed === false means
+  // still being edited even if old score values are present, so it
+  // must not count as scored yet. confirmed === undefined (scores
+  // entered before this field existed) still counts, for the same
+  // backward-compatibility reason as the client-side version.
+  return round.courts.every((c) => c.scoreA != null && c.scoreB != null && c.confirmed !== false);
 }
 
 // The other half of "everyone else sees it unravel round by round" —
