@@ -525,6 +525,8 @@ import {
   watchSentOrganizerInvites,
   regenerateDraw,
   watchPadelFullDraw,
+  confirmCourtScore,
+  unconfirmCourtScore,
   deletePadelEvent,
   requestEventDeletion,
   cancelDeletionRequest,
@@ -812,8 +814,19 @@ function playerById(players, id) {
   return players.find((p) => p.id === id) || null;
 }
 
+// A court's score only counts as final once confirmed — not merely
+// "has numbers in it," since Edit can reopen an already-confirmed
+// score while the old values are still sitting in Firestore pending
+// the next Confirm. confirmed === undefined (not false, not true) is
+// treated as final if both scores are present — that's specifically
+// for scores entered before this Confirm/Edit flow existed at all,
+// which never had this field set to begin with.
+function courtScoreIsFinal(court) {
+  return court.scoreA != null && court.scoreB != null && court.confirmed !== false;
+}
+
 function roundIsComplete(round) {
-  return round.courts.every((c) => c.scoreA != null && c.scoreB != null);
+  return round.courts.every(courtScoreIsFinal);
 }
 
 function computeStandings(players, rounds) {
@@ -829,7 +842,7 @@ function computeStandings(players, rounds) {
   });
   rounds.forEach((round) => {
     round.courts.forEach((court) => {
-      if (court.scoreA == null || court.scoreB == null) return;
+      if (!courtScoreIsFinal(court)) return;
       const aWon = court.scoreA > court.scoreB;
       const bWon = court.scoreB > court.scoreA;
       court.teamA.forEach((id) => {
@@ -1670,28 +1683,59 @@ function EventTeamLabel({ players, ids, winning, align = "left" }) {
   );
 }
 
-function EventCourtCard({ court, players, onScoreChange, editable }) {
-  const aHas = court.scoreA != null;
-  const bHas = court.scoreB != null;
-  const aWins = aHas && bHas && court.scoreA > court.scoreB;
-  const bWins = aHas && bHas && court.scoreB > court.scoreA;
+// Defined once, at module level — not inside EventCourtCard. That
+// distinction is the actual fix for the cursor-jumping-mid-typing bug:
+// a component declared inside another component's body gets recreated
+// as a brand new function on every render, and React treats a new
+// function reference as a different component type even when the code
+// is identical. That forces the underlying <input> DOM node to
+// unmount and remount on every keystroke, which is what was silently
+// destroying cursor position each time — nothing to do with the input
+// element itself, entirely about where this was declared.
+function ScoreDisplay({ value, editing, onChange, ariaLabel }) {
+  return editing ? (
+    <input inputMode="numeric" pattern="[0-9]*" className="rally-score-input rally-tabular"
+      value={value == null ? "" : String(value)} onChange={onChange}
+      placeholder="0" aria-label={ariaLabel} />
+  ) : (
+    <span className="rally-score-input rally-tabular" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {value == null ? "–" : value}
+    </span>
+  );
+}
 
-  const handleChange = (field) => (e) => {
-    const raw = e.target.value.replace(/[^0-9]/g, "").slice(0, 3);
-    onScoreChange(field, raw === "" ? null : parseInt(raw, 10));
+function EventCourtCard({ court, players, editable, onConfirm, onEdit }) {
+  const isFinal = courtScoreIsFinal(court);
+  // Only used to seed the very first render — after that, this
+  // device's own edit/confirm taps are what control it, deliberately
+  // not re-synced from remote confirmed changes, so one organizer
+  // mid-edit never gets yanked out of it by another organizer's
+  // device doing something elsewhere.
+  const [editing, setEditing] = useState(!isFinal && editable);
+  const [draftA, setDraftA] = useState(court.scoreA);
+  const [draftB, setDraftB] = useState(court.scoreB);
+
+  const displayA = editing ? draftA : court.scoreA;
+  const displayB = editing ? draftB : court.scoreB;
+  const aWins = !editing && displayA != null && displayB != null && displayA > displayB;
+  const bWins = !editing && displayA != null && displayB != null && displayB > displayA;
+
+  const makeChangeHandler = (setDraft) => (e) => {
+    const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 3);
+    setDraft(digits === "" ? null : parseInt(digits, 10));
   };
 
-  const ScoreDisplay = ({ value, field, ariaLabel }) => (
-    editable ? (
-      <input inputMode="numeric" pattern="[0-9]*" className="rally-score-input rally-tabular"
-        value={value == null ? "" : String(value)} onChange={handleChange(field)}
-        placeholder="0" aria-label={ariaLabel} />
-    ) : (
-      <span className="rally-score-input rally-tabular" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {value == null ? "–" : value}
-      </span>
-    )
-  );
+  const handleConfirmClick = () => {
+    onConfirm(draftA, draftB);
+    setEditing(false);
+  };
+
+  const handleEditClick = () => {
+    setDraftA(court.scoreA);
+    setDraftB(court.scoreB);
+    setEditing(true);
+    onEdit();
+  };
 
   return (
     <div className="rally-court-card p-4">
@@ -1700,13 +1744,27 @@ function EventCourtCard({ court, players, onScoreChange, editable }) {
       </div>
       <div className="flex items-center justify-between gap-3">
         <EventTeamLabel players={players} ids={court.teamA} winning={aWins} />
-        <ScoreDisplay value={court.scoreA} field="scoreA" ariaLabel="Team A score" />
+        <ScoreDisplay value={displayA} editing={editing} onChange={makeChangeHandler(setDraftA)} ariaLabel="Team A score" />
       </div>
       <div className="rally-net-line my-3" />
       <div className="flex items-center justify-between gap-3">
-        <ScoreDisplay value={court.scoreB} field="scoreB" ariaLabel="Team B score" />
+        <ScoreDisplay value={displayB} editing={editing} onChange={makeChangeHandler(setDraftB)} ariaLabel="Team B score" />
         <EventTeamLabel players={players} ids={court.teamB} winning={bWins} align="right" />
       </div>
+      {editable ? (
+        editing ? (
+          <button type="button" onClick={handleConfirmClick} disabled={draftA == null || draftB == null}
+            className="w-full mt-3 py-2 rounded-lg text-xs font-semibold"
+            style={{ background: "var(--court-blue)", color: "var(--court-blue-ink)", opacity: (draftA == null || draftB == null) ? 0.5 : 1 }}>
+            Confirm
+          </button>
+        ) : (
+          <button type="button" onClick={handleEditClick}
+            className="w-full mt-3 py-2 rounded-lg text-xs font-semibold" style={{ border: "1px solid var(--line-strong)", color: "var(--slate)" }}>
+            Edit
+          </button>
+        )
+      ) : null}
     </div>
   );
 }
@@ -1735,9 +1793,13 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
           <div className="grid gap-3 sm:grid-cols-2">
             {round.courts.map((court) => (
               <EventCourtCard key={court.court} court={court} players={players} editable={editable}
-                onScoreChange={(field, value) => {
-                  dispatch({ roundIndex, court: court.court, field, value });
-                  syncPadelScoreField(eventId, roundIndex, court.court, field, value);
+                onConfirm={(scoreA, scoreB) => {
+                  dispatch({ roundIndex, court: court.court, patch: { scoreA, scoreB, confirmed: true } });
+                  confirmCourtScore(eventId, roundIndex, court.court, scoreA, scoreB);
+                }}
+                onEdit={() => {
+                  dispatch({ roundIndex, court: court.court, patch: { confirmed: false } });
+                  unconfirmCourtScore(eventId, roundIndex, court.court);
                 }} />
             ))}
           </div>
@@ -1753,7 +1815,7 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
             <div key={court.court} className="text-xs py-0.5 truncate" style={{ color: "var(--slate)" }}>
               C{court.court}: {court.teamA.map((id) => playerName(players, id)).join(" & ")}{" "}
               <span className="rally-tabular font-semibold" style={{ color: "var(--ink)" }}>
-                {court.scoreA ?? "–"}–{court.scoreB ?? "–"}
+                {courtScoreIsFinal(court) ? court.scoreA : "–"}–{courtScoreIsFinal(court) ? court.scoreB : "–"}
               </span>{" "}
               {court.teamB.map((id) => playerName(players, id)).join(" & ")}
             </div>
@@ -1852,12 +1914,12 @@ function EventFull({ event, eventId, isOrganizer }) {
   // Local, optimistic score updates so the input feels instant while
   // syncPadelScoreField's debounced transaction catches up in the
   // background — the live listener above will reconcile shortly after.
-  const dispatch = ({ roundIndex, court, field, value }) => {
+  const dispatch = ({ roundIndex, court, patch }) => {
     setTournament((prev) => {
       if (!prev) return prev;
       const rounds = prev.rounds.map((r, ri) => {
         if (ri !== roundIndex) return r;
-        return { ...r, courts: r.courts.map((c) => (c.court !== court ? c : { ...c, [field]: value })) };
+        return { ...r, courts: r.courts.map((c) => (c.court !== court ? c : { ...c, ...patch })) };
       });
       return { ...prev, rounds };
     });

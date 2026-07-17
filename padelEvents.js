@@ -538,3 +538,50 @@ export function syncPadelScoreField(eventId, roundIdx, courtNumber, field, value
     }
   }, 150);
 }
+
+// The Confirm/Edit flow: typing happens purely in local component
+// state now, not synced keystroke-by-keystroke — this is the one
+// write that actually lands in Firestore, all three fields (both
+// scores plus confirmed) together in a single transaction, once the
+// organizer deliberately taps Confirm. No debounce needed here, since
+// this only ever fires from one explicit tap, never from rapid typing.
+export async function confirmCourtScore(eventId, roundIdx, courtNumber, scoreA, scoreB) {
+  const ref = doc(db, PADEL_EVENTS, eventId, 'tournament', 'draw');
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const rounds = (data.rounds || []).map((r, ri) => {
+      if (ri !== roundIdx) return r;
+      return {
+        ...r,
+        courts: (r.courts || []).map((c) =>
+          c.court !== courtNumber ? c : { ...c, scoreA, scoreB, confirmed: true }),
+      };
+    });
+    tx.update(ref, { rounds, updatedAt: serverTimestamp() });
+  });
+}
+
+// Reopens an already-confirmed score for editing — flips confirmed
+// back to false immediately, on its own, so anyone else looking at it
+// live sees accurately that it's being changed rather than showing a
+// stale "final" number while the organizer is mid-edit. The scores
+// themselves are untouched until the next confirmCourtScore call.
+export async function unconfirmCourtScore(eventId, roundIdx, courtNumber) {
+  const ref = doc(db, PADEL_EVENTS, eventId, 'tournament', 'draw');
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const rounds = (data.rounds || []).map((r, ri) => {
+      if (ri !== roundIdx) return r;
+      return {
+        ...r,
+        courts: (r.courts || []).map((c) => (c.court !== courtNumber ? c : { ...c, confirmed: false })),
+      };
+    });
+    tx.update(ref, { rounds, updatedAt: serverTimestamp() });
+  });
+}
+
