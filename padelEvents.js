@@ -62,6 +62,10 @@ export async function updatePadelEvent(eventId, fields) {
 // tournament draw if one was ever generated — before deleting the
 // event document itself. Leaving those orphaned wouldn't break
 // anything visibly, but they'd sit there indefinitely otherwise.
+// Organizer-only, but the actual deletion this performs only ever
+// succeeds against the rules if the caller is the event's original
+// creator — see the requestEventDeletion/cancelDeletionRequest pair
+// below for what every other organizer actually gets instead.
 export async function deletePadelEvent(eventId) {
   const [padelInvites, organizerInvites] = await Promise.all([
     getDocs(collection(db, PADEL_EVENTS, eventId, 'padelInvites')),
@@ -74,6 +78,53 @@ export async function deletePadelEvent(eventId) {
   ];
   await Promise.all(deletions);
   await deleteDoc(doc(db, PADEL_EVENTS, eventId));
+}
+
+// For any organizer who isn't the event's creator — deleting is a
+// two-step approval, not a direct action, specifically to guard
+// against accidental deletion by someone other than whoever's
+// ultimately responsible for the event. This just records who asked;
+// the actual delete only ever happens when the creator calls
+// deletePadelEvent themself.
+export async function requestEventDeletion(eventId, myUid, myName) {
+  await updateDoc(doc(db, PADEL_EVENTS, eventId), {
+    deleteRequestedBy: myUid,
+    deleteRequestedByName: myName || '',
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Clears a pending deletion request — used both by the creator
+// declining it, and by whoever asked changing their mind.
+export async function cancelDeletionRequest(eventId) {
+  await updateDoc(doc(db, PADEL_EVENTS, eventId), {
+    deleteRequestedBy: null,
+    deleteRequestedByName: null,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Lets an organizer set how they're displayed specifically in the
+// organizers list — separate from participantNames, which is their
+// real name shown if they're also playing. Self-only in the UI (the
+// form only ever edits your own), though the underlying rule doesn't
+// technically restrict it beyond normal organizer trust — same as
+// participantNames itself already works.
+export async function setOrganizerAlias(eventId, myUid, alias) {
+  const snap = await getDoc(doc(db, PADEL_EVENTS, eventId));
+  if (!snap.exists()) throw new Error('This event no longer exists.');
+  const data = snap.data();
+  const trimmed = (alias || '').trim();
+  const nextAliases = { ...(data.organizerAliases || {}) };
+  if (trimmed) {
+    nextAliases[myUid] = trimmed;
+  } else {
+    delete nextAliases[myUid];
+  }
+  await updateDoc(doc(db, PADEL_EVENTS, eventId), {
+    organizerAliases: nextAliases,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 // Add or remove an organizer. The 4-organizer cap is enforced by the
@@ -96,7 +147,11 @@ export async function addOrganizer(eventId, uid, name) {
 export async function removeOrganizer(eventId, uid) {
   const snap = await getDoc(doc(db, PADEL_EVENTS, eventId));
   if (!snap.exists()) throw new Error('This event no longer exists.');
-  const organizers = (snap.data().organizers || []).filter((id) => id !== uid);
+  const data = snap.data();
+  if (uid === data.createdBy) {
+    throw new Error("The event's original organizer can't be removed by anyone else.");
+  }
+  const organizers = (data.organizers || []).filter((id) => id !== uid);
   if (organizers.length === 0) throw new Error('An event needs at least one organizer.');
   await updateDoc(doc(db, PADEL_EVENTS, eventId), {
     organizers,

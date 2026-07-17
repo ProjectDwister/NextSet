@@ -525,6 +525,9 @@ import {
   watchSentOrganizerInvites,
   regenerateDraw,
   deletePadelEvent,
+  requestEventDeletion,
+  cancelDeletionRequest,
+  setOrganizerAlias,
 } from './padelEvents.js';
 
 const { useEffect, useMemo, useState } = React;
@@ -1204,6 +1207,9 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [sentPlayerInvites, setSentPlayerInvites] = useState([]);
+  const [aliasInput, setAliasInput] = useState("");
+  const [editingAlias, setEditingAlias] = useState(false);
+  const [savingAlias, setSavingAlias] = useState(false);
   const [sentOrgInvites, setSentOrgInvites] = useState([]);
 
   useEffect(() => {
@@ -1297,6 +1303,19 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
     }
   };
 
+  const handleSaveAlias = async () => {
+    setSavingAlias(true);
+    setOrgError("");
+    try {
+      await setOrganizerAlias(eventId, myUid, aliasInput);
+      setEditingAlias(false);
+    } catch (e) {
+      setOrgError(e && e.message ? e.message : "Could not save that.");
+    } finally {
+      setSavingAlias(false);
+    }
+  };
+
   const handleLeaveAsPlayer = async () => {
     setLeaving(true);
     try {
@@ -1365,16 +1384,46 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
             {orgError}
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {organizers.map((uid) => (
-            <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
-              {(event.participantNames || {})[uid] || "Someone"}
-              {isOrganizer && organizers.length > 1 ? (
-                <button type="button" onClick={() => revokeOrganizer(uid)} style={{ width: "auto", color: "var(--danger)", fontWeight: 700 }}>&times;</button>
-              ) : null}
-            </span>
-          ))}
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {organizers.map((uid) => {
+            const displayName = (event.organizerAliases || {})[uid] || (event.participantNames || {})[uid] || "Someone";
+            const isCreator = uid === event.createdBy;
+            return (
+              <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
+                {displayName}
+                {isOrganizer && organizers.length > 1 && !isCreator ? (
+                  <button type="button" onClick={() => revokeOrganizer(uid)} style={{ width: "auto", color: "var(--danger)", fontWeight: 700 }}>&times;</button>
+                ) : null}
+              </span>
+            );
+          })}
         </div>
+
+        {isOrganizer ? (
+          editingAlias ? (
+            <div className="flex gap-2 mb-3">
+              <input type="text" value={aliasInput} onChange={(e) => setAliasInput(e.target.value)}
+                placeholder="How you're shown as organizer"
+                className="flex-1 px-3 py-2 rounded-lg text-xs"
+                style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+              <button type="button" onClick={handleSaveAlias} disabled={savingAlias}
+                className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ width: "auto", background: "var(--court-blue)", color: "var(--court-blue-ink)" }}>
+                {savingAlias ? "…" : "Save"}
+              </button>
+              <button type="button" onClick={() => setEditingAlias(false)} disabled={savingAlias}
+                className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ width: "auto", color: "var(--slate)" }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button type="button"
+              onClick={() => { setAliasInput((event.organizerAliases || {})[myUid] || ""); setEditingAlias(true); }}
+              className="text-xs font-semibold mb-3"
+              style={{ width: "auto", color: "var(--slate)", textDecoration: "underline" }}>
+              {(event.organizerAliases || {})[myUid] ? "Change how you're shown as organizer" : "Show a different name as organizer"}
+            </button>
+          )
+        ) : null}
 
         {isOrganizer && organizers.length < 4 && participants.some(([uid]) => !organizers.includes(uid)) ? (
           <div className="flex flex-wrap gap-1.5 mb-3">
@@ -2107,6 +2156,32 @@ function EventsApp() {
     }
   }
 
+  async function handleRequestDeletion() {
+    if (!selectedId) return;
+    setDeletingEvent(true);
+    setDeleteEventError("");
+    try {
+      await requestEventDeletion(selectedId, uid, profile.name);
+    } catch (e) {
+      setDeleteEventError(e && e.message ? e.message : "Could not send the request.");
+    } finally {
+      setDeletingEvent(false);
+    }
+  }
+
+  async function handleCancelDeletionRequest() {
+    if (!selectedId) return;
+    setDeletingEvent(true);
+    setDeleteEventError("");
+    try {
+      await cancelDeletionRequest(selectedId);
+    } catch (e) {
+      setDeleteEventError(e && e.message ? e.message : "Could not cancel that.");
+    } finally {
+      setDeletingEvent(false);
+    }
+  }
+
   if (!authChecked || !loaded) {
     return (
       <div className="rally-root flex items-center justify-center" style={{ minHeight: "60vh" }}>
@@ -2172,31 +2247,87 @@ function EventsApp() {
       {selectedEvent && isOrganizer ? (
         <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "2rem" }}>
           <div className="rally-card p-4" style={{ borderColor: "var(--danger)" }}>
-            <div className="text-sm font-bold mb-1" style={{ color: "var(--danger)" }}>Delete this event</div>
-            <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
-              Removes the event, every invite sent, and the draw if one exists. Nobody can undo this — including you.
-            </div>
-            {deleteEventError ? (
-              <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
-                {deleteEventError}
-              </div>
-            ) : null}
-            {confirmingDeleteEvent ? (
-              <div className="flex gap-2">
-                <button type="button" onClick={handleDeleteEvent} disabled={deletingEvent}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "var(--danger)", color: "#fff" }}>
-                  {deletingEvent ? "Deleting…" : "Yes, delete permanently"}
-                </button>
-                <button type="button" onClick={() => setConfirmingDeleteEvent(false)} disabled={deletingEvent}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
-                  Cancel
-                </button>
-              </div>
+            {uid === selectedEvent.createdBy ? (
+              selectedEvent.deleteRequestedBy ? (
+                <React.Fragment>
+                  <div className="text-sm font-bold mb-1" style={{ color: "var(--danger)" }}>Deletion requested</div>
+                  <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+                    {selectedEvent.deleteRequestedByName || "Another organizer"} has asked for this event to be
+                    deleted. Nothing happens unless you approve it.
+                  </div>
+                  {deleteEventError ? (
+                    <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+                      {deleteEventError}
+                    </div>
+                  ) : null}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={handleDeleteEvent} disabled={deletingEvent}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "var(--danger)", color: "#fff" }}>
+                      {deletingEvent ? "…" : "Approve — delete permanently"}
+                    </button>
+                    <button type="button" onClick={handleCancelDeletionRequest} disabled={deletingEvent}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
+                      Deny
+                    </button>
+                  </div>
+                </React.Fragment>
+              ) : (
+                <React.Fragment>
+                  <div className="text-sm font-bold mb-1" style={{ color: "var(--danger)" }}>Delete this event</div>
+                  <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+                    Removes the event, every invite sent, and the draw if one exists. Nobody can undo this — including you.
+                  </div>
+                  {deleteEventError ? (
+                    <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+                      {deleteEventError}
+                    </div>
+                  ) : null}
+                  {confirmingDeleteEvent ? (
+                    <div className="flex gap-2">
+                      <button type="button" onClick={handleDeleteEvent} disabled={deletingEvent}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "var(--danger)", color: "#fff" }}>
+                        {deletingEvent ? "Deleting…" : "Yes, delete permanently"}
+                      </button>
+                      <button type="button" onClick={() => setConfirmingDeleteEvent(false)} disabled={deletingEvent}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setConfirmingDeleteEvent(true)}
+                      className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--danger)", color: "var(--danger)" }}>
+                      Delete event
+                    </button>
+                  )}
+                </React.Fragment>
+              )
             ) : (
-              <button type="button" onClick={() => setConfirmingDeleteEvent(true)}
-                className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--danger)", color: "var(--danger)" }}>
-                Delete event
-              </button>
+              <React.Fragment>
+                <div className="text-sm font-bold mb-1" style={{ color: "var(--danger)" }}>
+                  {selectedEvent.deleteRequestedBy === uid ? "Deletion requested" : "Request deletion"}
+                </div>
+                <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+                  {selectedEvent.deleteRequestedBy === uid
+                    ? "Waiting for the event's original organizer to approve. You can withdraw this any time."
+                    : "Only the event's original organizer can delete it directly — this asks them to, rather than deleting it yourself."}
+                </div>
+                {deleteEventError ? (
+                  <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+                    {deleteEventError}
+                  </div>
+                ) : null}
+                {selectedEvent.deleteRequestedBy === uid ? (
+                  <button type="button" onClick={handleCancelDeletionRequest} disabled={deletingEvent}
+                    className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
+                    Withdraw request
+                  </button>
+                ) : (
+                  <button type="button" onClick={handleRequestDeletion} disabled={deletingEvent}
+                    className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--danger)", color: "var(--danger)" }}>
+                    {deletingEvent ? "…" : "Request deletion"}
+                  </button>
+                )}
+              </React.Fragment>
             )}
           </div>
         </div>
