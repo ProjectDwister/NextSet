@@ -2254,7 +2254,7 @@ function EventsApp() {
             <CreateEventForm onCreate={handleCreate} creating={creating} error={createError} />
           ) : null}
         </div>
-      )}
+      ) : null}
 
       {selectedId === "__new__" ? (
         <div style={{ position: "fixed", inset: 0, background: "var(--chalk)", overflowY: "auto", zIndex: 40 }}>
