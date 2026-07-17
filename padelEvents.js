@@ -419,6 +419,18 @@ export function watchPadelTournament(eventId, onChange, onError) {
   );
 }
 
+// The complete, all-rounds-upfront schedule — only ever succeeds for
+// an organizer; the rules deny this read outright for anyone else,
+// not just hide it in the UI. Callers should treat a permission error
+// here as the expected, normal case for a non-organizer, not a bug.
+export function watchPadelFullDraw(eventId, onChange, onError) {
+  return onSnapshot(
+    doc(db, PADEL_EVENTS, eventId, 'tournament', 'fullDraw'),
+    (snap) => onChange(snap.exists() ? snap.data() : null),
+    onError,
+  );
+}
+
 /* ============================================================
    Organizer invites — deliberately separate from padelInvites
    above, not a role field on the same collection. Someone can be

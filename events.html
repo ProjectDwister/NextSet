@@ -524,6 +524,7 @@ import {
   watchSentPadelInvites,
   watchSentOrganizerInvites,
   regenerateDraw,
+  watchPadelFullDraw,
   deletePadelEvent,
   requestEventDeletion,
   cancelDeletionRequest,
@@ -1008,14 +1009,27 @@ function CreateEventForm({ onCreate, creating, error }) {
   const [notes, setNotes] = useState("");
   const [iAmPlaying, setIAmPlaying] = useState(true);
   const [localError, setLocalError] = useState("");
+  const [numRounds, setNumRounds] = useState(suggestedRounds(12));
+  const [roundsManuallySet, setRoundsManuallySet] = useState(false);
 
   const numCourts = Math.max(1, Math.floor(Number(capacity) / 4));
   const capacityValid = Number(capacity) >= 4 && Number(capacity) % 4 === 0;
+  const perfectRounds = Math.max(1, Number(capacity) - 1);
+
+  // Follows the suggested default as capacity changes, right up until
+  // the person actually edits the rounds field themself — after that,
+  // their choice sticks regardless of further capacity edits.
+  useEffect(() => {
+    if (!roundsManuallySet) {
+      setNumRounds(suggestedRounds(Number(capacity) || 4));
+    }
+  }, [capacity]);
 
   const handleSubmit = () => {
     if (!date || !startTime) return setLocalError("Pick a date and start time.");
     if (!location.trim()) return setLocalError("Add a venue.");
     if (!capacityValid) return setLocalError("Total players must be a multiple of 4 (so every court stays full).");
+    if (!Number(numRounds) || Number(numRounds) < 1) return setLocalError("Enter at least 1 round.");
     setLocalError("");
     onCreate({
       dateTime: toTimestamp(date, startTime),
@@ -1023,7 +1037,7 @@ function CreateEventForm({ onCreate, creating, error }) {
       location: location.trim(),
       courts: courts.trim() || `${numCourts} court${numCourts === 1 ? "" : "s"}`,
       capacity: Number(capacity),
-      numRounds: suggestedRounds(Number(capacity)),
+      numRounds: Number(numRounds),
       pointsTarget: 24,
       notes: notes.trim(),
     }, iAmPlaying);
@@ -1086,6 +1100,29 @@ function CreateEventForm({ onCreate, creating, error }) {
               className="w-full px-3 py-2.5 rounded-lg text-sm"
               style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
           </div>
+        </div>
+      </div>
+
+      <div className="rally-card p-4 mb-5">
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Rounds</label>
+        <div className="flex gap-2 items-start">
+          <input type="number" min="1" step="1" value={numRounds}
+            onChange={(e) => { setRoundsManuallySet(true); setNumRounds(e.target.value); }}
+            className="px-3 py-2.5 rounded-lg text-sm rally-tabular"
+            style={{ width: "96px", border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+          {capacityValid && Number(numRounds) !== perfectRounds ? (
+            <button type="button"
+              onClick={() => { setRoundsManuallySet(true); setNumRounds(perfectRounds); }}
+              className="text-xs font-semibold px-3 py-2.5 rounded-lg"
+              style={{ width: "auto", border: "1px dashed var(--line-strong)", color: "var(--slate)" }}>
+              Use {perfectRounds} (everyone partners once)
+            </button>
+          ) : null}
+        </div>
+        <div className="text-xs" style={{ color: "var(--slate)", marginTop: "6px" }}>
+          {capacityValid
+            ? `${perfectRounds} rounds means every player partners with every other player exactly once. Fewer rounds means a shorter event, but some partnerships won't happen.`
+            : "Set total players first to see the full-coverage round count."}
         </div>
       </div>
 
@@ -1764,17 +1801,32 @@ function EventStandings({ tournament }) {
 
 function EventFull({ event, eventId, isOrganizer }) {
   const [tournament, setTournament] = useState(null);
+  const [fullDraw, setFullDraw] = useState(null);
   const [activeTab, setActiveTab] = useState("play");
   const [expandedIdx, setExpandedIdx] = useState(0);
   const [, forceRender] = useState(0);
   const [confirmingRegen, setConfirmingRegen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState("");
+  const [showUpcoming, setShowUpcoming] = useState(false);
 
   useEffect(() => {
     const unsub = watchPadelTournament(eventId, (t) => setTournament(t), () => {});
     return () => unsub();
   }, [eventId]);
+
+  // Only ever succeeds for an actual organizer — the rules deny this
+  // outright for anyone else, so a permission error here for a
+  // regular participant is the expected, correct behavior, not
+  // something to surface as a problem.
+  useEffect(() => {
+    if (!isOrganizer) { setFullDraw(null); return; }
+    const unsub = watchPadelFullDraw(eventId, (d) => setFullDraw(d), () => setFullDraw(null));
+    return () => unsub();
+  }, [eventId, isOrganizer]);
+
+  const anyScoresEntered = tournament && tournament.rounds.some((r) =>
+    r.courts.some((c) => c.scoreA != null || c.scoreB != null));
 
   const handleRegenerate = async () => {
     setRegenerating(true);
@@ -1818,6 +1870,59 @@ function EventFull({ event, eventId, isOrganizer }) {
           Only organizers can update scores — you're viewing live.
         </div>
       ) : null}
+
+      {isOrganizer ? (
+        <div className="rally-card p-4 mb-5">
+          {regenError ? (
+            <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+              {regenError}
+            </div>
+          ) : null}
+          {!anyScoresEntered ? (
+            <React.Fragment>
+              <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Need to swap a player?</div>
+              <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+                No scores entered yet, so there's nothing to lose — this takes you back to add or remove players,
+                then makes a fresh draw automatically once it's full again.
+              </div>
+              <button type="button" onClick={handleRegenerate} disabled={regenerating}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}>
+                {regenerating ? "…" : "Edit players"}
+              </button>
+            </React.Fragment>
+          ) : confirmingRegen ? (
+            <React.Fragment>
+              <div className="text-sm font-bold mb-1" style={{ color: "var(--danger)" }}>Regenerate draw</div>
+              <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+                Scores have already been entered — regenerating clears every one of them, and there's no undo.
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={handleRegenerate} disabled={regenerating}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "var(--danger)", color: "#fff" }}>
+                  {regenerating ? "Regenerating…" : "Yes, regenerate"}
+                </button>
+                <button type="button" onClick={() => setConfirmingRegen(false)} disabled={regenerating}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
+                  Cancel
+                </button>
+              </div>
+            </React.Fragment>
+          ) : (
+            <React.Fragment>
+              <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Need to swap a player?</div>
+              <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+                Scores have already been entered for this event — editing players means regenerating the draw,
+                which clears everything entered so far.
+              </div>
+              <button type="button" onClick={() => setConfirmingRegen(true)}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}>
+                Edit players
+              </button>
+            </React.Fragment>
+          )}
+        </div>
+      ) : null}
+
       <div className="flex gap-2 mb-5 rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--line)", padding: "0.25rem" }}>
         <button type="button" onClick={() => setActiveTab("play")}
           className={"rally-tab-btn flex-1 py-2 text-sm" + (activeTab === "play" ? " active" : "")}>
@@ -1829,6 +1934,37 @@ function EventFull({ event, eventId, isOrganizer }) {
         </button>
       </div>
 
+      {isOrganizer && fullDraw && fullDraw.rounds.length > tournament.rounds.length ? (
+        <div className="rally-card p-4 mb-5">
+          <button type="button" onClick={() => setShowUpcoming(!showUpcoming)}
+            className="text-sm font-bold w-full text-left flex items-center justify-between" style={{ color: "var(--ink)" }}>
+            <span>Peek ahead — rounds {tournament.rounds.length + 1}–{fullDraw.rounds.length}</span>
+            <span style={{ color: "var(--slate)" }}>{showUpcoming ? "▲" : "▼"}</span>
+          </button>
+          <div className="text-xs" style={{ color: "var(--slate)", marginTop: "4px" }}>
+            Only you can see these — everyone else finds out one round at a time, as each one finishes.
+          </div>
+          {showUpcoming ? (
+            <div className="mt-3" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.75rem" }}>
+              {fullDraw.rounds.slice(tournament.rounds.length).map((round, i) => (
+                <div key={i} className="mb-2.5">
+                  <div className="text-xs font-bold mb-1" style={{ color: "var(--slate)" }}>
+                    Round {tournament.rounds.length + i + 1}
+                  </div>
+                  {round.courts.map((court) => (
+                    <div key={court.court} className="text-xs py-0.5" style={{ color: "var(--ink)" }}>
+                      C{court.court}: {court.teamA.map((id) => playerName(fullDraw.players, id)).join(" & ")}
+                      {" vs "}
+                      {court.teamB.map((id) => playerName(fullDraw.players, id)).join(" & ")}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {activeTab === "play" ? (
         tournament.rounds.map((round, idx) => (
           <EventRoundBlock key={idx} round={round} roundIndex={idx} totalRounds={tournament.rounds.length}
@@ -1839,38 +1975,6 @@ function EventFull({ event, eventId, isOrganizer }) {
       ) : (
         <EventStandings tournament={tournament} />
       )}
-
-      {isOrganizer ? (
-        <div className="rally-card p-4 mt-2" style={{ marginTop: "1.5rem" }}>
-          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Regenerate draw</div>
-          <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
-            Makes a fresh draw for everyone currently in the event — useful if someone dropped out and was
-            replaced. This clears every score entered so far; there's no undo.
-          </div>
-          {regenError ? (
-            <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
-              {regenError}
-            </div>
-          ) : null}
-          {confirmingRegen ? (
-            <div className="flex gap-2">
-              <button type="button" onClick={handleRegenerate} disabled={regenerating}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: "var(--danger)", color: "#fff" }}>
-                {regenerating ? "Regenerating…" : "Yes, regenerate"}
-              </button>
-              <button type="button" onClick={() => setConfirmingRegen(false)} disabled={regenerating}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--slate)" }}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button type="button" onClick={() => setConfirmingRegen(true)}
-              className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ border: "1.5px solid var(--line)", color: "var(--ink)" }}>
-              Regenerate draw
-            </button>
-          )}
-        </div>
-      ) : null}
     </div>
   );
 }
