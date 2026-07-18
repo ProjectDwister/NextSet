@@ -2471,7 +2471,9 @@ function EventsApp() {
     );
   }
 
-  const selectedEvent = selectedId ? myEvents.find((e) => e.id === selectedId) : null;
+  const selectedEvent = selectedId
+    ? (myEvents.find((e) => e.id === selectedId) || (adminEvents || []).find((e) => e.id === selectedId))
+    : null;
   const isOrganizer = selectedEvent && uid && (selectedEvent.organizers || []).includes(uid);
 
   return (
