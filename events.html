@@ -1929,6 +1929,10 @@ function EventFull({ event, eventId, isOrganizer }) {
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState("");
   const [showUpcoming, setShowUpcoming] = useState(false);
+  const [editingRounds, setEditingRounds] = useState(false);
+  const [roundsInput, setRoundsInput] = useState(event.numRounds);
+  const [savingRounds, setSavingRounds] = useState(false);
+  const [roundsError, setRoundsError] = useState("");
 
   useEffect(() => {
     const unsub = watchPadelTournament(eventId, (t) => setTournament(t), () => {});
@@ -1961,6 +1965,21 @@ function EventFull({ event, eventId, isOrganizer }) {
     }
   };
 
+  const handleSaveRounds = async () => {
+    const n = Number(roundsInput);
+    if (!n || n < 1) return setRoundsError("Enter at least 1 round.");
+    setSavingRounds(true);
+    setRoundsError("");
+    try {
+      await updatePadelEvent(eventId, { numRounds: n });
+      setEditingRounds(false);
+    } catch (e) {
+      setRoundsError(e && e.message ? e.message : "Could not save that.");
+    } finally {
+      setSavingRounds(false);
+    }
+  };
+
   if (!tournament) {
     return (
       <div className="max-w-xl mx-auto px-4 pb-28 text-center" style={{ color: "var(--slate)" }}>
@@ -1988,6 +2007,43 @@ function EventFull({ event, eventId, isOrganizer }) {
       {!isOrganizer ? (
         <div className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: "var(--chalk)", color: "var(--slate)" }}>
           Only organizers can update scores — you're viewing live.
+        </div>
+      ) : null}
+
+      {isOrganizer ? (
+        <div className="rally-card p-4 mb-5">
+          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Rounds</div>
+          <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
+            Set this before editing players — regenerating happens right away once the event is full again.
+          </div>
+          {roundsError ? (
+            <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+              {roundsError}
+            </div>
+          ) : null}
+          {editingRounds ? (
+            <div className="flex gap-2 items-center">
+              <input type="number" min="1" step="1" value={roundsInput} onChange={(e) => setRoundsInput(e.target.value)}
+                className="px-3 py-2 rounded-lg text-sm rally-tabular"
+                style={{ width: "80px", border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+              <button type="button" onClick={handleSaveRounds} disabled={savingRounds}
+                className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ width: "auto", background: "var(--court-blue)", color: "var(--court-blue-ink)" }}>
+                {savingRounds ? "…" : "Save"}
+              </button>
+              <button type="button" onClick={() => setEditingRounds(false)} disabled={savingRounds}
+                className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ width: "auto", color: "var(--slate)" }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm" style={{ color: "var(--ink)" }}>{event.numRounds} rounds</span>
+              <button type="button" onClick={() => { setRoundsInput(event.numRounds); setEditingRounds(true); }}
+                className="text-xs font-semibold" style={{ width: "auto", color: "var(--slate)", textDecoration: "underline" }}>
+                Change
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
 
