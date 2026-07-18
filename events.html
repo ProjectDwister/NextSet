@@ -1257,6 +1257,10 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [sentPlayerInvites, setSentPlayerInvites] = useState([]);
+  const [editingRounds, setEditingRounds] = useState(false);
+  const [roundsInput, setRoundsInput] = useState(event.numRounds);
+  const [savingRounds, setSavingRounds] = useState(false);
+  const [roundsError, setRoundsError] = useState("");
   const [aliasInput, setAliasInput] = useState("");
   const [editingAlias, setEditingAlias] = useState(false);
   const [savingAlias, setSavingAlias] = useState(false);
@@ -1366,6 +1370,21 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
     }
   };
 
+  const handleSaveRounds = async () => {
+    const n = Number(roundsInput);
+    if (!n || n < 1) return setRoundsError("Enter at least 1 round.");
+    setSavingRounds(true);
+    setRoundsError("");
+    try {
+      await updatePadelEvent(eventId, { numRounds: n });
+      setEditingRounds(false);
+    } catch (e) {
+      setRoundsError(e && e.message ? e.message : "Could not save that.");
+    } finally {
+      setSavingRounds(false);
+    }
+  };
+
   const handleLeaveAsPlayer = async () => {
     setLeaving(true);
     try {
@@ -1422,7 +1441,38 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
         {event.location}
       </div>
       <p className="text-sm mb-1" style={{ color: "var(--slate)" }}>{formatEventWhen(event)}</p>
-      <p className="text-sm mb-5" style={{ color: "var(--slate)" }}>{event.courts}</p>
+      <p className="text-sm mb-1" style={{ color: "var(--slate)" }}>{event.courts}</p>
+
+      {editingRounds ? (
+        <div className="flex gap-2 items-center mb-5">
+          <input type="number" min="1" step="1" value={roundsInput} onChange={(e) => setRoundsInput(e.target.value)}
+            className="px-3 py-2 rounded-lg text-sm rally-tabular"
+            style={{ width: "80px", border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+          <button type="button" onClick={handleSaveRounds} disabled={savingRounds}
+            className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ width: "auto", background: "var(--court-blue)", color: "var(--court-blue-ink)" }}>
+            {savingRounds ? "…" : "Save"}
+          </button>
+          <button type="button" onClick={() => setEditingRounds(false)} disabled={savingRounds}
+            className="text-xs font-semibold px-3 py-2 rounded-lg" style={{ width: "auto", color: "var(--slate)" }}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <p className="text-sm mb-5" style={{ color: "var(--slate)" }}>
+          {event.numRounds} rounds
+          {isOrganizer ? (
+            <button type="button" onClick={() => { setRoundsInput(event.numRounds); setEditingRounds(true); }}
+              className="text-xs font-semibold" style={{ width: "auto", color: "var(--slate)", textDecoration: "underline", marginLeft: "8px" }}>
+              Change
+            </button>
+          ) : null}
+        </p>
+      )}
+      {roundsError ? (
+        <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+          {roundsError}
+        </div>
+      ) : null}
 
       <div className="rally-card p-4 mb-5">
         <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizers</div>
@@ -1704,7 +1754,7 @@ function ScoreDisplay({ value, editing, onChange, ariaLabel }) {
   );
 }
 
-function EventCourtCard({ court, players, editable, onConfirm, onEdit }) {
+function EventCourtCard({ court, players, editable, onDraftChange, onConfirm, onEdit }) {
   const isFinal = courtScoreIsFinal(court);
   // Only used to seed the very first render — after that, this
   // device's own edit/confirm taps are what control it, deliberately
@@ -1720,9 +1770,16 @@ function EventCourtCard({ court, players, editable, onConfirm, onEdit }) {
   const aWins = !editing && displayA != null && displayB != null && displayA > displayB;
   const bWins = !editing && displayA != null && displayB != null && displayB > displayA;
 
-  const makeChangeHandler = (setDraft) => (e) => {
+  // Every keystroke also saves to Firestore, debounced — not just to
+  // local state. That's what makes closing the app or navigating away
+  // mid-type safe: without this, typing lived only in memory until
+  // Confirm, and leaving the page lost it entirely. confirmed is
+  // never touched here, only by an actual Confirm tap.
+  const makeChangeHandler = (field, setDraft) => (e) => {
     const digits = e.target.value.replace(/[^0-9]/g, "").slice(0, 3);
-    setDraft(digits === "" ? null : parseInt(digits, 10));
+    const value = digits === "" ? null : parseInt(digits, 10);
+    setDraft(value);
+    onDraftChange(field, value);
   };
 
   const handleConfirmClick = () => {
@@ -1744,11 +1801,11 @@ function EventCourtCard({ court, players, editable, onConfirm, onEdit }) {
       </div>
       <div className="flex items-center justify-between gap-3">
         <EventTeamLabel players={players} ids={court.teamA} winning={aWins} />
-        <ScoreDisplay value={displayA} editing={editing} onChange={makeChangeHandler(setDraftA)} ariaLabel="Team A score" />
+        <ScoreDisplay value={displayA} editing={editing} onChange={makeChangeHandler("scoreA", setDraftA)} ariaLabel="Team A score" />
       </div>
       <div className="rally-net-line my-3" />
       <div className="flex items-center justify-between gap-3">
-        <ScoreDisplay value={displayB} editing={editing} onChange={makeChangeHandler(setDraftB)} ariaLabel="Team B score" />
+        <ScoreDisplay value={displayB} editing={editing} onChange={makeChangeHandler("scoreB", setDraftB)} ariaLabel="Team B score" />
         <EventTeamLabel players={players} ids={court.teamB} winning={bWins} align="right" />
       </div>
       {editable ? (
@@ -1793,6 +1850,7 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
           <div className="grid gap-3 sm:grid-cols-2">
             {round.courts.map((court) => (
               <EventCourtCard key={court.court} court={court} players={players} editable={editable}
+                onDraftChange={(field, value) => syncPadelScoreField(eventId, roundIndex, court.court, field, value)}
                 onConfirm={(scoreA, scoreB) => {
                   dispatch({ roundIndex, court: court.court, patch: { scoreA, scoreB, confirmed: true } });
                   confirmCourtScore(eventId, roundIndex, court.court, scoreA, scoreB);
