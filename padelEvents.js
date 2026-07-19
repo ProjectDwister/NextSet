@@ -28,17 +28,6 @@ export async function getPadelEvent(eventId) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-// Real-time event metadata for the standalone live Americano page.
-// Access remains governed by the same participant/organizer Firestore
-// rules as every other padelEvents read.
-export function watchPadelEvent(eventId, onChange, onError) {
-  return onSnapshot(
-    doc(db, PADEL_EVENTS, eventId),
-    (snap) => onChange(snap.exists() ? { id: snap.id, ...snap.data() } : null),
-    onError,
-  );
-}
-
 export async function createPadelEvent(fields, myUid, myName, iAmPlaying = true) {
   const ref = await addDoc(collection(db, PADEL_EVENTS), {
     createdBy: myUid,
@@ -523,7 +512,7 @@ export async function acceptOrganizerInvite(eventId, invitedPhone, myUid, myName
 // version. Debounced 150ms per field so rapid +/- taps don't each
 // trigger their own transaction.
 const scoreSyncTimers = {};
-export function syncPadelScoreField(eventId, roundIdx, courtNumber, field, value, onResult) {
+export function syncPadelScoreField(eventId, roundIdx, courtNumber, field, value) {
   const key = `${eventId}:${roundIdx}:${courtNumber}:${field}`;
   if (scoreSyncTimers[key]) clearTimeout(scoreSyncTimers[key]);
   scoreSyncTimers[key] = setTimeout(async () => {
@@ -537,23 +526,15 @@ export function syncPadelScoreField(eventId, roundIdx, courtNumber, field, value
           if (ri !== roundIdx) return r;
           return {
             ...r,
-            // Any score edit means the round is actively being worked on.
-            // Mark the edited court unconfirmed in the same atomic write so
-            // the reveal Cloud Function cannot treat two freshly typed
-            // scores as a completed round before Confirm is pressed.
-            courts: (r.courts || []).map((c) => (
-              c.court !== courtNumber ? c : { ...c, [field]: value, confirmed: false }
-            )),
+            courts: (r.courts || []).map((c) => (c.court !== courtNumber ? c : { ...c, [field]: value })),
           };
         });
         tx.update(ref, { rounds, updatedAt: serverTimestamp() });
       });
-      if (typeof onResult === 'function') onResult(null);
     } catch (e) {
-      // Existing callers can keep treating score syncing as non-fatal.
-      // The full-screen event page supplies this optional callback so a
-      // participant immediately sees when Firestore rules blocked a save.
-      if (typeof onResult === 'function') onResult(e);
+      // Non-fatal — local state (via the reducer/UI) already reflects
+      // the change either way; the next edit's debounced write, or a
+      // future one, reconciles it.
     }
   }, 150);
 }

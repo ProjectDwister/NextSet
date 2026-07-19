@@ -2021,18 +2021,8 @@ function EventFull({ event, eventId, isOrganizer }) {
     <div className="max-w-xl mx-auto px-4 pb-28">
       {!isOrganizer ? (
         <div className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: "var(--chalk)", color: "var(--slate)" }}>
-          The standard Events view is read-only for players. Open the full-screen Americano page below to enter, edit and confirm scores; every accepted player has scoring access there.
+          Only organizers can update scores — you're viewing live.
         </div>
-      ) : null}
-
-      {event.capacity === 8 && event.numRounds === 7 ? (
-        <a href={`americano-8-player-event.html?event=${encodeURIComponent(eventId)}`}
-          className="rally-card p-4 mb-5 block" style={{ textDecoration: "none", borderColor: "var(--court-blue)" }}>
-          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Open the full-screen live event page</div>
-          <div className="text-xs" style={{ color: "var(--slate)" }}>
-            Today’s exact perfect draw is locked on this page. Use it as the source of truth, share it with all eight players, and enter all live scores there.
-          </div>
-        </a>
       ) : null}
 
       {isOrganizer ? (
@@ -2661,24 +2651,6 @@ function EventsApp() {
           <InvitationsSection invites={myInvites} onAccept={handleAcceptInvite} onDecline={handleDeclineInvite}
             organizerInvites={myOrganizerInvites} onAcceptOrganizer={handleAcceptOrganizerInvite} onDeclineOrganizer={handleDeclineOrganizerInvite}
             busyId={inviteBusyId} />
-
-          <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "1.5rem" }}>
-            <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>
-              Hosted draw
-            </div>
-            <a href="americano-8-player-event.html" className="rally-card w-full text-left p-4 block" style={{ textDecoration: "none" }}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>8-Player Americano</div>
-                  <div className="text-xs mb-2" style={{ color: "var(--slate)" }}>7 rounds · 2 courts · perfect partner and opponent rotation</div>
-                  <span className="rally-chip px-3 py-1 text-xs font-semibold" style={{ color: "var(--court-blue)" }}>
-                    Open public event page
-                  </span>
-                </div>
-                <span aria-hidden="true" style={{ color: "var(--slate)", fontSize: "1.1rem" }}>→</span>
-              </div>
-            </a>
-          </div>
 
           {myEvents.length ? <EventsList events={myEvents} onSelect={setSelectedId} /> : null}
 
