@@ -833,6 +833,23 @@
 
     function enterApp(profile) {
       currentProfile = profile;
+
+      // A Firebase-backed event page can send a signed-out player here
+      // with a same-origin returnTo path. After phone verification and
+      // profile loading, take them straight back to that live event.
+      const returnTo = new URLSearchParams(location.search).get('returnTo');
+      if (returnTo) {
+        try {
+          const target = new URL(returnTo, location.href);
+          if (target.origin === location.origin && target.pathname !== location.pathname) {
+            location.replace(target.pathname + target.search + target.hash);
+            return;
+          }
+        } catch (e) {
+          // Ignore malformed or cross-origin return targets.
+        }
+      }
+
       showView('app');
       clearAppError();
       if (unsubscribeEvents) unsubscribeEvents();

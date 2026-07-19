@@ -28,6 +28,17 @@ export async function getPadelEvent(eventId) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
+// Real-time event metadata for the standalone live Americano page.
+// Access remains governed by the same participant/organizer Firestore
+// rules as every other padelEvents read.
+export function watchPadelEvent(eventId, onChange, onError) {
+  return onSnapshot(
+    doc(db, PADEL_EVENTS, eventId),
+    (snap) => onChange(snap.exists() ? { id: snap.id, ...snap.data() } : null),
+    onError,
+  );
+}
+
 export async function createPadelEvent(fields, myUid, myName, iAmPlaying = true) {
   const ref = await addDoc(collection(db, PADEL_EVENTS), {
     createdBy: myUid,
@@ -526,7 +537,13 @@ export function syncPadelScoreField(eventId, roundIdx, courtNumber, field, value
           if (ri !== roundIdx) return r;
           return {
             ...r,
-            courts: (r.courts || []).map((c) => (c.court !== courtNumber ? c : { ...c, [field]: value })),
+            // Any score edit means the round is actively being worked on.
+            // Mark the edited court unconfirmed in the same atomic write so
+            // the reveal Cloud Function cannot treat two freshly typed
+            // scores as a completed round before Confirm is pressed.
+            courts: (r.courts || []).map((c) => (
+              c.court !== courtNumber ? c : { ...c, [field]: value, confirmed: false }
+            )),
           };
         });
         tx.update(ref, { rounds, updatedAt: serverTimestamp() });
