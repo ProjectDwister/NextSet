@@ -2021,7 +2021,7 @@ function EventFull({ event, eventId, isOrganizer }) {
     <div className="max-w-xl mx-auto px-4 pb-28">
       {!isOrganizer ? (
         <div className="text-xs mb-4 px-3 py-2 rounded-lg" style={{ background: "var(--chalk)", color: "var(--slate)" }}>
-          Only organizers can update scores in this Events view. The full-screen live page lets every participant enter scores.
+          Scores can be updated by the event organizers/scorekeepers. Every accepted player can open the full-screen page to follow the draw, scores and standings live.
         </div>
       ) : null}
 
@@ -2030,7 +2030,7 @@ function EventFull({ event, eventId, isOrganizer }) {
           className="rally-card p-4 mb-5 block" style={{ textDecoration: "none", borderColor: "var(--court-blue)" }}>
           <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Open the full-screen live event page</div>
           <div className="text-xs" style={{ color: "var(--slate)" }}>
-            Share this page with the eight players. Scores and standings update from the same Firebase event in real time.
+            Today’s exact perfect draw is locked on this page. Use it as the source of truth, share it with all eight players, and enter all live scores there.
           </div>
         </a>
       ) : null}

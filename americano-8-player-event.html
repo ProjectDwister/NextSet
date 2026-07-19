@@ -550,6 +550,47 @@
   const params = new URLSearchParams(location.search);
   const eventId = params.get('event') || params.get('eventId') || '';
 
+  // Emergency tournament preset for today's 8-player Americano.
+  // The Firebase-generated draw may have perfect partnerships but uneven
+  // opponent repetition. This page deliberately overlays the exact whist
+  // design below while continuing to use the existing Firebase round/court
+  // score fields for real-time syncing.
+  const PERFECT_PLAYER_NAMES = [
+    'Anandita', 'Arunima', 'Neetul', 'Pam',
+    'Poonam', 'Ritika', 'Shweta', 'Swat',
+  ];
+
+  const PERFECT_DRAW_BY_NAME = [
+    [
+      { courtLabel: 2, teamA: ['Anandita', 'Arunima'], teamB: ['Neetul', 'Pam'] },
+      { courtLabel: 3, teamA: ['Poonam', 'Ritika'], teamB: ['Shweta', 'Swat'] },
+    ],
+    [
+      { courtLabel: 2, teamA: ['Anandita', 'Neetul'], teamB: ['Poonam', 'Shweta'] },
+      { courtLabel: 3, teamA: ['Arunima', 'Pam'], teamB: ['Ritika', 'Swat'] },
+    ],
+    [
+      { courtLabel: 2, teamA: ['Anandita', 'Pam'], teamB: ['Poonam', 'Swat'] },
+      { courtLabel: 3, teamA: ['Arunima', 'Neetul'], teamB: ['Ritika', 'Shweta'] },
+    ],
+    [
+      { courtLabel: 2, teamA: ['Anandita', 'Poonam'], teamB: ['Arunima', 'Ritika'] },
+      { courtLabel: 3, teamA: ['Neetul', 'Shweta'], teamB: ['Pam', 'Swat'] },
+    ],
+    [
+      { courtLabel: 2, teamA: ['Anandita', 'Ritika'], teamB: ['Neetul', 'Swat'] },
+      { courtLabel: 3, teamA: ['Arunima', 'Poonam'], teamB: ['Pam', 'Shweta'] },
+    ],
+    [
+      { courtLabel: 2, teamA: ['Anandita', 'Shweta'], teamB: ['Pam', 'Ritika'] },
+      { courtLabel: 3, teamA: ['Arunima', 'Swat'], teamB: ['Neetul', 'Poonam'] },
+    ],
+    [
+      { courtLabel: 2, teamA: ['Anandita', 'Swat'], teamB: ['Arunima', 'Shweta'] },
+      { courtLabel: 3, teamA: ['Neetul', 'Ritika'], teamB: ['Pam', 'Poonam'] },
+    ],
+  ];
+
   let currentUser = null;
   let profile = null;
   let eventData = null;
@@ -628,24 +669,65 @@
     return found ? found.name : ((eventData && eventData.participantNames && eventData.participantNames[playerId]) || 'Player');
   }
 
+  function normalizePlayerName(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
   function displayPlayers() {
     const source = (liveTournament && liveTournament.players) || (fullDraw && fullDraw.players) || [];
-    return source.length ? source : Object.entries((eventData && eventData.participantNames) || {}).map(([id, name]) => ({ id, name }));
+    const players = source.length
+      ? source
+      : Object.entries((eventData && eventData.participantNames) || {}).map(([id, name]) => ({ id, name }));
+    const order = new Map(PERFECT_PLAYER_NAMES.map((name, index) => [normalizePlayerName(name), index]));
+    return [...players].sort((a, b) => {
+      const ai = order.has(normalizePlayerName(a.name)) ? order.get(normalizePlayerName(a.name)) : 999;
+      const bi = order.has(normalizePlayerName(b.name)) ? order.get(normalizePlayerName(b.name)) : 999;
+      return ai - bi || String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }
+
+  function buildPerfectTournament() {
+    if (!liveTournament) return null;
+    const players = displayPlayers();
+    const byName = new Map(players.map((player) => [normalizePlayerName(player.name), player]));
+    const missing = PERFECT_PLAYER_NAMES.filter((name) => !byName.has(normalizePlayerName(name)));
+    if (missing.length || players.length !== 8) return null;
+
+    const firebaseCourtNumbers = (liveTournament.rounds && liveTournament.rounds[0] && liveTournament.rounds[0].courts)
+      ? liveTournament.rounds[0].courts.map((court) => court.court).sort((a, b) => a - b)
+      : [1, 2];
+
+    const rounds = PERFECT_DRAW_BY_NAME.map((roundTemplate, roundIndex) => ({
+      courts: roundTemplate.map((courtTemplate, courtIndex) => {
+        const storageCourt = firebaseCourtNumbers[courtIndex] == null ? courtIndex + 1 : firebaseCourtNumbers[courtIndex];
+        const liveRound = liveTournament.rounds && liveTournament.rounds[roundIndex];
+        const liveCourt = liveRound && liveRound.courts
+          ? liveRound.courts.find((court) => court.court === storageCourt)
+          : null;
+        return {
+          court: courtTemplate.courtLabel,
+          storageCourt,
+          teamA: courtTemplate.teamA.map((name) => byName.get(normalizePlayerName(name)).id),
+          teamB: courtTemplate.teamB.map((name) => byName.get(normalizePlayerName(name)).id),
+          scoreA: liveCourt ? liveCourt.scoreA : null,
+          scoreB: liveCourt ? liveCourt.scoreB : null,
+          confirmed: liveCourt ? liveCourt.confirmed : false,
+        };
+      }),
+      sittingOut: [],
+    }));
+
+    return {
+      ...liveTournament,
+      players,
+      rounds,
+      numCourts: 2,
+      perfectPreset: true,
+    };
   }
 
   function mergedTournament() {
-    if (!liveTournament) return null;
-    if (!isOrganizer || !fullDraw) return liveTournament;
-    const liveRounds = liveTournament.rounds || [];
-    const rounds = (fullDraw.rounds || []).map((round, roundIndex) => {
-      if (!liveRounds[roundIndex]) return round;
-      const liveByCourt = new Map((liveRounds[roundIndex].courts || []).map((court) => [court.court, court]));
-      return {
-        ...round,
-        courts: (round.courts || []).map((court) => ({ ...court, ...(liveByCourt.get(court.court) || {}) })),
-      };
-    });
-    return { ...fullDraw, rounds };
+    return buildPerfectTournament();
   }
 
   function courtIsFinal(court) {
@@ -673,17 +755,15 @@
   function renderEventMeta() {
     const players = displayPlayers();
     const totalRounds = totalRoundCount();
-    const courtCount = (liveTournament && liveTournament.numCourts) || Math.max(1, Math.floor(((eventData && eventData.capacity) || players.length || 4) / 4));
+    const courtCount = 2;
     const target = (liveTournament && liveTournament.pointsTarget) || (eventData && eventData.pointsTarget) || 24;
-    const titleBits = [];
-    if (eventData && eventData.location) titleBits.push(eventData.location);
-    el('eventTitle').textContent = titleBits.length ? titleBits.join(' - ') : `${players.length || 8}-Player Americano`;
-    el('eventSubtitle').textContent = `${players.length || 8} players, ${totalRounds || 7} rounds and ${courtCount} courts. Scores update live across every signed-in participant's phone.`;
+    el('eventTitle').textContent = "Today's Perfect Americano";
+    el('eventSubtitle').textContent = `${players.length || 8} players, ${totalRounds || 7} rounds, Court #2 and Court #3. The exact balanced draw is locked on this page and scores update live.`;
     const details = [];
     const when = eventData ? formatWhen(eventData.dateTime) : '';
     if (when) details.push(`<span><strong>When:</strong> ${escapeHtml(when)}</span>`);
     if (eventData && eventData.location) details.push(`<span><strong>Venue:</strong> ${escapeHtml(eventData.location)}</span>`);
-    if (eventData && eventData.courts) details.push(`<span><strong>Courts:</strong> ${escapeHtml(eventData.courts)}</span>`);
+    details.push('<span><strong>Courts:</strong> Court #2 and Court #3</span>');
     if (eventData && eventData.durationMin) details.push(`<span><strong>Duration:</strong> ${escapeHtml(eventData.durationMin)} min</span>`);
     el('eventDetails').innerHTML = details.join('');
     el('playerCount').textContent = String(players.length || (eventData && eventData.capacity) || 8);
@@ -692,10 +772,10 @@
     el('pointsCount').textContent = String(target);
     el('pointsChip').textContent = `${target} points per match`;
     el('revealChip').textContent = `${revealedRoundCount()} of ${totalRounds} rounds revealed`;
-    el('eyebrow').textContent = isOrganizer ? 'Live Firebase event - organizer access' : 'Live Firebase event - participant access';
+    el('eyebrow').textContent = isOrganizer ? 'Perfect draw - scorekeeper access' : 'Perfect draw - live spectator access';
     el('storageNotice').innerHTML = canEdit
-      ? '<strong>Live scoring:</strong> Every score entered here is written to Firebase and appears on all other open phones. Confirm a round after both courts are complete to reveal the next round.'
-      : '<strong>Live view:</strong> Scores update automatically. This account can view the event but cannot edit its scores.';
+      ? '<strong>Live scoring:</strong> You are an organizer for this event. Scores entered here are written to Firebase and appear on every open phone. Confirm a round after both courts are complete.'
+      : '<strong>Live view:</strong> Scores update automatically. Only the event organizers/scorekeepers can change or confirm scores.';
   }
 
   function setupPlayerFilter() {
@@ -782,19 +862,20 @@
           <button class="round-head" type="button" data-round-toggle="${roundIndex}" aria-expanded="${open}">
             <span>
               <span class="round-title">Round ${roundIndex + 1}</span>
-              <span class="round-meta">${(round.courts || []).length} courts - playing to ${target} points${isRevealed ? '' : ' - organizer preview'}</span>
+              <span class="round-meta">Court #2 and Court #3 - playing to ${target} points${isRevealed ? '' : ' - score entry locked'}</span>
             </span>
             <span class="round-right">${final ? '<span class="check">&#10003;</span>' : ''}<span>${open ? '&#9652;' : '&#9662;'}</span></span>
           </button>
           <div class="round-body" ${open ? '' : 'hidden'}>
             <div class="court-grid">
               ${(round.courts || []).map((court) => {
-                const liveCourt = findLiveCourt(roundIndex, court.court);
+                const storageCourt = court.storageCourt == null ? court.court : court.storageCourt;
+                const liveCourt = findLiveCourt(roundIndex, storageCourt);
                 const displayCourt = liveCourt || court;
                 const isConfirmed = courtIsFinal(displayCourt);
                 const readOnly = !editableRound || isConfirmed;
-                const keyA = `${roundIndex}:${court.court}:scoreA`;
-                const keyB = `${roundIndex}:${court.court}:scoreB`;
+                const keyA = `${roundIndex}:${storageCourt}:scoreA`;
+                const keyB = `${roundIndex}:${storageCourt}:scoreB`;
                 return `
                   <article class="court-card">
                     <div class="court-label">Court ${court.court}</div>
@@ -802,14 +883,14 @@
                       <div class="team">${teamHtml(court.teamA)}</div>
                       <input class="score" type="number" min="0" max="999" inputmode="numeric"
                         aria-label="Round ${roundIndex + 1}, Court ${court.court}, Team A score"
-                        data-score-input="${keyA}" data-round="${roundIndex}" data-court="${court.court}" data-field="scoreA"
+                        data-score-input="${keyA}" data-round="${roundIndex}" data-court="${storageCourt}" data-field="scoreA"
                         value="${displayCourt.scoreA == null ? '' : displayCourt.scoreA}" ${readOnly ? 'readonly' : ''} />
                     </div>
                     <div class="net"></div>
                     <div class="team-row reverse">
                       <input class="score" type="number" min="0" max="999" inputmode="numeric"
                         aria-label="Round ${roundIndex + 1}, Court ${court.court}, Team B score"
-                        data-score-input="${keyB}" data-round="${roundIndex}" data-court="${court.court}" data-field="scoreB"
+                        data-score-input="${keyB}" data-round="${roundIndex}" data-court="${storageCourt}" data-field="scoreB"
                         value="${displayCourt.scoreB == null ? '' : displayCourt.scoreB}" ${readOnly ? 'readonly' : ''} />
                       <div class="team reverse">${teamHtml(court.teamB)}</div>
                     </div>
@@ -818,7 +899,7 @@
               }).join('')}
             </div>
             <div class="round-status">
-              <span class="round-lock">${isRevealed ? (isConfirmedRound(roundIndex) ? 'Confirmed and counted in standings' : (canEdit ? 'Live edits sync automatically' : 'Waiting for organizer confirmation')) : 'This round has not been revealed to players yet'}</span>
+              <span class="round-lock">${isRevealed ? (isConfirmedRound(roundIndex) ? 'Confirmed and counted in standings' : (canEdit ? 'Live edits sync automatically' : 'Waiting for organizer confirmation')) : 'The draw is visible now; score entry unlocks after the preceding round is confirmed'}</span>
               ${editableRound ? (isConfirmedRound(roundIndex)
                 ? `<button class="round-action" type="button" data-edit-round="${roundIndex}">Edit round</button>`
                 : `<button class="round-action" type="button" data-confirm-round="${roundIndex}" ${allFilled ? '' : 'disabled'}>Confirm round</button>`)
@@ -897,7 +978,8 @@
     const table = Object.fromEntries(players.map((player) => [player.id, {
       id: player.id, name: player.name, played: 0, points: 0, against: 0, diff: 0, wins: 0,
     }]));
-    (liveTournament && liveTournament.rounds ? liveTournament.rounds : []).forEach((round) => {
+    const tournament = mergedTournament();
+    (tournament && tournament.rounds ? tournament.rounds : []).forEach((round) => {
       (round.courts || []).forEach((court) => {
         if (!courtIsFinal(court)) return;
         const a = Number(court.scoreA);
@@ -970,8 +1052,8 @@
       item(true, 'Real-time Firebase scoring', 'Confirmed scores and standings stay synchronized across every open participant and organizer device.'),
     ].join('');
     el('balanceNote').innerHTML = result.completeSchedule
-      ? 'The full draw has been checked directly from Firebase. This is a mathematically balanced <strong>whist tournament design</strong>, adapted for Americano padel.'
-      : 'Players see the draw one round at a time. Full balance verification appears automatically after all rounds have been revealed; organizers can verify it earlier because they can access the complete draw.';
+      ? 'This page uses the exact mathematically balanced <strong>whist tournament design</strong> prepared for Anandita, Arunima, Neetul, Pam, Poonam, Ritika, Shweta and Swat. Firebase is used only for the live scores and confirmations.'
+      : 'The exact player names must match today\'s eight-player list before the perfect draw can be displayed.';
   }
 
   function updateProgress() {
@@ -983,6 +1065,14 @@
 
   function renderAll() {
     if (!eventData || !liveTournament) return;
+    if (!mergedTournament()) {
+      const found = displayPlayers().map((player) => player.name).filter(Boolean).join(', ');
+      showError(
+        'Today\'s player list does not match',
+        `This quick-fix page expects exactly: ${PERFECT_PLAYER_NAMES.join(', ')}. The connected event currently contains: ${found || 'no player names yet'}.`,
+      );
+      return;
+    }
     el('loadingCard').classList.add('hidden');
     el('errorCard').classList.add('hidden');
     el('eventApp').classList.remove('hidden');
@@ -1006,8 +1096,9 @@
       const participants = value.participants || [];
       const organizers = value.organizers || [];
       isOrganizer = organizers.includes(currentUser.uid);
-      canEdit = isOrganizer || participants.includes(currentUser.uid);
-      if (!canEdit) {
+      const hasAccess = isOrganizer || participants.includes(currentUser.uid);
+      canEdit = isOrganizer;
+      if (!hasAccess) {
         showError('You do not have access yet', 'Accept the player or organizer invitation in Court Pop Events first, then reopen this live event link.');
         return;
       }
