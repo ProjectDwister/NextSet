@@ -523,7 +523,7 @@ export async function acceptOrganizerInvite(eventId, invitedPhone, myUid, myName
 // version. Debounced 150ms per field so rapid +/- taps don't each
 // trigger their own transaction.
 const scoreSyncTimers = {};
-export function syncPadelScoreField(eventId, roundIdx, courtNumber, field, value) {
+export function syncPadelScoreField(eventId, roundIdx, courtNumber, field, value, onResult) {
   const key = `${eventId}:${roundIdx}:${courtNumber}:${field}`;
   if (scoreSyncTimers[key]) clearTimeout(scoreSyncTimers[key]);
   scoreSyncTimers[key] = setTimeout(async () => {
@@ -548,10 +548,12 @@ export function syncPadelScoreField(eventId, roundIdx, courtNumber, field, value
         });
         tx.update(ref, { rounds, updatedAt: serverTimestamp() });
       });
+      if (typeof onResult === 'function') onResult(null);
     } catch (e) {
-      // Non-fatal — local state (via the reducer/UI) already reflects
-      // the change either way; the next edit's debounced write, or a
-      // future one, reconciles it.
+      // Existing callers can keep treating score syncing as non-fatal.
+      // The full-screen event page supplies this optional callback so a
+      // participant immediately sees when Firestore rules blocked a save.
+      if (typeof onResult === 'function') onResult(e);
     }
   }, 150);
 }

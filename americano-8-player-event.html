@@ -598,6 +598,7 @@
   let fullDraw = null;
   let canEdit = false;
   let isOrganizer = false;
+  let isParticipant = false;
   let expandedRounds = new Set([0]);
   let selectedPlayer = '';
   let toastTimer = null;
@@ -641,7 +642,7 @@
   function friendlyError(error) {
     const code = error && error.code ? String(error.code) : '';
     if (code.includes('permission-denied')) {
-      return 'This Firebase event is private. Sign in with the phone number that was invited, accept the invitation in Events, and open the live page again.';
+      return 'Firebase denied this action. Accepted players need the participant-scoring Firestore rule included with this quick fix; otherwise accept the event invitation first.';
     }
     if (code.includes('unavailable')) return 'Firebase is temporarily unavailable. Check your internet connection and try again.';
     return error && error.message ? error.message : 'The live event could not be loaded.';
@@ -772,10 +773,8 @@
     el('pointsCount').textContent = String(target);
     el('pointsChip').textContent = `${target} points per match`;
     el('revealChip').textContent = `${revealedRoundCount()} of ${totalRounds} rounds revealed`;
-    el('eyebrow').textContent = isOrganizer ? 'Perfect draw - scorekeeper access' : 'Perfect draw - live spectator access';
-    el('storageNotice').innerHTML = canEdit
-      ? '<strong>Live scoring:</strong> You are an organizer for this event. Scores entered here are written to Firebase and appear on every open phone. Confirm a round after both courts are complete.'
-      : '<strong>Live view:</strong> Scores update automatically. Only the event organizers/scorekeepers can change or confirm scores.';
+    el('eyebrow').textContent = isOrganizer ? 'Perfect draw - organizer scoring access' : 'Perfect draw - player scoring access';
+    el('storageNotice').innerHTML = '<strong>Open player scoring:</strong> Every accepted player and organizer in this event can enter, edit, confirm and reopen scores. Changes are written to Firebase and appear on every open phone.';
   }
 
   function setupPlayerFilter() {
@@ -899,7 +898,7 @@
               }).join('')}
             </div>
             <div class="round-status">
-              <span class="round-lock">${isRevealed ? (isConfirmedRound(roundIndex) ? 'Confirmed and counted in standings' : (canEdit ? 'Live edits sync automatically' : 'Waiting for organizer confirmation')) : 'The draw is visible now; score entry unlocks after the preceding round is confirmed'}</span>
+              <span class="round-lock">${isRevealed ? (isConfirmedRound(roundIndex) ? 'Confirmed and counted in standings' : (canEdit ? 'Every accepted player can score; live edits sync automatically' : 'Waiting for score confirmation')) : 'The draw is visible now; score entry unlocks after the preceding round is confirmed'}</span>
               ${editableRound ? (isConfirmedRound(roundIndex)
                 ? `<button class="round-action" type="button" data-edit-round="${roundIndex}">Edit round</button>`
                 : `<button class="round-action" type="button" data-confirm-round="${roundIndex}" ${allFilled ? '' : 'disabled'}>Confirm round</button>`)
@@ -928,7 +927,14 @@
         input.value = digits;
         setLocalScore(roundIndex, courtNumber, field, value);
         updateSyncState('Saving...', 'waiting');
-        syncPadelScoreField(eventId, roundIndex, courtNumber, field, value);
+        syncPadelScoreField(eventId, roundIndex, courtNumber, field, value, (error) => {
+          if (error) {
+            updateSyncState('Score not saved', 'error');
+            showToast(friendlyError(error));
+          } else {
+            updateSyncState('Saved - live', 'live');
+          }
+        });
         renderStandings();
         updateProgress();
       });
@@ -938,7 +944,7 @@
       button.addEventListener('click', async () => {
         const roundIndex = Number(button.dataset.confirmRound);
         const round = liveTournament.rounds[roundIndex];
-        const courtScores = (round.courts || []).map((court) => ({ court: court.court, scoreA: court.scoreA, scoreB: court.scoreB }));
+        const courtScores = (round.courts || []).map((court) => ({ court: court.storageCourt == null ? court.court : court.storageCourt, scoreA: court.scoreA, scoreB: court.scoreB }));
         button.disabled = true;
         try {
           await confirmRoundScores(eventId, roundIndex, courtScores);
@@ -1096,10 +1102,11 @@
       const participants = value.participants || [];
       const organizers = value.organizers || [];
       isOrganizer = organizers.includes(currentUser.uid);
-      const hasAccess = isOrganizer || participants.includes(currentUser.uid);
-      canEdit = isOrganizer;
+      isParticipant = participants.includes(currentUser.uid);
+      const hasAccess = isOrganizer || isParticipant;
+      canEdit = hasAccess;
       if (!hasAccess) {
-        showError('You do not have access yet', 'Accept the player or organizer invitation in Court Pop Events first, then reopen this live event link.');
+        showError('You do not have access yet', 'Accept the player or organizer invitation in Court Pop Events first, then reopen this live event link. Once accepted, you can also enter and edit scores.');
         return;
       }
       if (isOrganizer && !fullDrawUnsub) {
