@@ -1334,6 +1334,19 @@ function formatEventWhen(ev) {
   return `${dayStr} · ${startStr} – ${endStr}`;
 }
 
+// Keep the admin-wide event list focused on events that are still relevant.
+// Historical events remain in Firestore and can still be opened if you have a
+// direct link; they simply stop cluttering the Events landing page once their
+// scheduled duration has finished.
+function isPastEvent(ev) {
+  if (!ev || !ev.dateTime) return false;
+  const start = ev.dateTime.toDate ? ev.dateTime.toDate() : new Date(ev.dateTime);
+  if (Number.isNaN(start.getTime())) return false;
+  const durationMin = Number(ev.durationMin) || 0;
+  const end = new Date(start.getTime() + durationMin * 60000);
+  return end.getTime() < Date.now();
+}
+
 function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, onOrganizerChange, onLeaveAsPlayer, onRemoveParticipant }) {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
@@ -2953,6 +2966,9 @@ function EventsApp() {
     ? (myEvents.find((e) => e.id === selectedId) || (adminEvents || []).find((e) => e.id === selectedId))
     : null;
   const isOrganizer = selectedEvent && uid && (selectedEvent.organizers || []).includes(uid);
+  const otherVisibleAdminEvents = adminEvents
+    ? adminEvents.filter((ev) => !isPastEvent(ev) && !myEvents.some((mine) => mine.id === ev.id))
+    : [];
 
   return (
     <div className="rally-root">
@@ -3117,15 +3133,15 @@ function EventsApp() {
 
           {myEvents.length ? <EventsList events={myEvents} onSelect={setSelectedId} /> : null}
 
-          {adminEvents && adminEvents.filter((ev) => !myEvents.some((mine) => mine.id === ev.id)).length ? (
+          {otherVisibleAdminEvents.length ? (
             <div>
               <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "0.5rem" }}>
                 <div className="text-xs" style={{ color: "var(--slate)" }}>
-                  Other events visible to your signed-in account. Score editing still requires organizer access for that event.
+                  Other upcoming events visible to your signed-in account. Score editing still requires organizer access for that event.
                 </div>
               </div>
               <EventsList
-                events={adminEvents.filter((ev) => !myEvents.some((mine) => mine.id === ev.id))}
+                events={otherVisibleAdminEvents}
                 onSelect={setSelectedId}
                 title="All events"
               />
