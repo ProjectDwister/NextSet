@@ -707,6 +707,114 @@ function generatePerfectAmericanoSchedule(players, numCourts, numRounds, balance
   return best;
 }
 
+const MIXED_AMERICANO_FORMAT = 'mixed-americano-6x6';
+const MIXED_AMERICANO_FEMALES = ['Pinder', 'Neetul', 'Arunima', 'Shweta', 'Poonam', 'Sonia'];
+const MIXED_AMERICANO_MALES = ['Sagar', 'Gautam', 'Rohit', 'Krish', 'Piyush', 'Raghav'];
+
+// This template is deliberately name-based rather than UID-based: the
+// Firebase UIDs are different in every deployment/account, while this
+// event's roster is fixed. It was optimized offline with two hard
+// constraints (all 36 mixed partnerships exactly once; no same-gender
+// partnerships) plus opponent-repeat and physical-court balance.
+// Court numbers are the real booked labels, not 1..3 aliases.
+const MIXED_AMERICANO_TEMPLATE = [
+  [
+    { court: 2, teamA: ['Sagar', 'Pinder'], teamB: ['Krish', 'Shweta'] },
+    { court: 3, teamA: ['Gautam', 'Neetul'], teamB: ['Piyush', 'Poonam'] },
+    { court: 4, teamA: ['Rohit', 'Arunima'], teamB: ['Raghav', 'Sonia'] },
+  ],
+  [
+    { court: 2, teamA: ['Sagar', 'Arunima'], teamB: ['Rohit', 'Poonam'] },
+    { court: 3, teamA: ['Krish', 'Sonia'], teamB: ['Piyush', 'Shweta'] },
+    { court: 4, teamA: ['Gautam', 'Pinder'], teamB: ['Raghav', 'Neetul'] },
+  ],
+  [
+    { court: 2, teamA: ['Piyush', 'Sonia'], teamB: ['Raghav', 'Poonam'] },
+    { court: 3, teamA: ['Sagar', 'Shweta'], teamB: ['Gautam', 'Arunima'] },
+    { court: 4, teamA: ['Rohit', 'Neetul'], teamB: ['Krish', 'Pinder'] },
+  ],
+  [
+    { court: 2, teamA: ['Gautam', 'Shweta'], teamB: ['Rohit', 'Sonia'] },
+    { court: 3, teamA: ['Krish', 'Neetul'], teamB: ['Raghav', 'Arunima'] },
+    { court: 4, teamA: ['Sagar', 'Poonam'], teamB: ['Piyush', 'Pinder'] },
+  ],
+  [
+    { court: 2, teamA: ['Gautam', 'Poonam'], teamB: ['Krish', 'Arunima'] },
+    { court: 3, teamA: ['Sagar', 'Sonia'], teamB: ['Raghav', 'Pinder'] },
+    { court: 4, teamA: ['Rohit', 'Shweta'], teamB: ['Piyush', 'Neetul'] },
+  ],
+  [
+    { court: 2, teamA: ['Sagar', 'Neetul'], teamB: ['Gautam', 'Sonia'] },
+    { court: 3, teamA: ['Rohit', 'Pinder'], teamB: ['Piyush', 'Arunima'] },
+    { court: 4, teamA: ['Krish', 'Poonam'], teamB: ['Raghav', 'Shweta'] },
+  ],
+];
+
+function rosterKey(name) {
+  return (name || '')
+    .normalize('NFKD')
+    .replace(/[\u200B-\u200D\uFEFF\u2060]/g, '')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)[0];
+}
+
+function resolveFixedMixedRoster(players) {
+  const expected = [...MIXED_AMERICANO_FEMALES, ...MIXED_AMERICANO_MALES];
+  const expectedByKey = new Map(expected.map((name) => [rosterKey(name), name]));
+  const byCanonicalName = new Map();
+  const unrecognized = [];
+  const duplicates = [];
+
+  players.forEach((player) => {
+    const canonical = expectedByKey.get(rosterKey(player.name));
+    if (!canonical) {
+      unrecognized.push(player.name || 'Unnamed player');
+      return;
+    }
+    if (byCanonicalName.has(canonical)) {
+      duplicates.push(canonical);
+      return;
+    }
+    byCanonicalName.set(canonical, player);
+  });
+
+  const missing = expected.filter((name) => !byCanonicalName.has(name));
+  if (unrecognized.length || duplicates.length || missing.length || players.length !== 12) {
+    const parts = [];
+    if (missing.length) parts.push(`Missing: ${missing.join(', ')}`);
+    if (unrecognized.length) parts.push(`Unrecognized: ${unrecognized.join(', ')}`);
+    if (duplicates.length) parts.push(`Duplicate roster name: ${[...new Set(duplicates)].join(', ')}`);
+    if (players.length !== 12) parts.push(`Need exactly 12 players; found ${players.length}`);
+    return { error: `Mixed Americano roster does not match the fixed 12-player setup. ${parts.join('. ')}` };
+  }
+
+  const genderByName = new Map([
+    ...MIXED_AMERICANO_FEMALES.map((name) => [name, 'F']),
+    ...MIXED_AMERICANO_MALES.map((name) => [name, 'M']),
+  ]);
+
+  const resolvedPlayers = players.map((p) => {
+    const canonical = expectedByKey.get(rosterKey(p.name));
+    return { ...p, name: canonical, gender: genderByName.get(canonical) };
+  });
+  const idByName = new Map();
+  byCanonicalName.forEach((p, name) => idByName.set(name, p.id));
+
+  const rounds = MIXED_AMERICANO_TEMPLATE.map((round) => ({
+    courts: round.map((match) => ({
+      court: match.court,
+      teamA: match.teamA.map((name) => idByName.get(name)),
+      teamB: match.teamB.map((name) => idByName.get(name)),
+      scoreA: null,
+      scoreB: null,
+    })),
+    sittingOut: [],
+  }));
+
+  return { players: resolvedPlayers, rounds };
+}
+
 function generateFullAmericanoSchedule(players, numCourts, numRounds, scheduleAttempts = 12) {
   const perfect = generatePerfectAmericanoSchedule(players, numCourts, numRounds);
   if (perfect) return perfect;
@@ -751,6 +859,30 @@ exports.generateDrawOnFull = onDocumentUpdated(
 
     const eventId = updateEvent.params.eventId;
     const eventRef = db.collection('padelEvents').doc(eventId);
+    const basePlayers = participants.map((uid) => ({
+      id: uid,
+      name: (after.participantNames && after.participantNames[uid]) || 'Player',
+      gender: '-',
+    }));
+    const format = after.tournamentFormat || 'americano';
+
+    // Validate the fixed mixed roster BEFORE claiming draw generation.
+    // If a name is wrong, keep drawGenerated=false and write one useful
+    // error message. Correcting the name later is another event update,
+    // so generation retries automatically without creating a loop.
+    let mixedResolved = null;
+    if (format === MIXED_AMERICANO_FORMAT) {
+      mixedResolved = resolveFixedMixedRoster(basePlayers);
+      if (mixedResolved.error) {
+        if (after.drawError !== mixedResolved.error) {
+          await eventRef.update({
+            drawError: mixedResolved.error,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+        return;
+      }
+    }
 
     // Guards against two near-simultaneous triggers (e.g. a retried
     // delivery) both trying to generate the draw — only the first to
@@ -758,32 +890,38 @@ exports.generateDrawOnFull = onDocumentUpdated(
     const claimed = await db.runTransaction(async (tx) => {
       const snap = await tx.get(eventRef);
       if (!snap.exists || snap.data().drawGenerated) return false;
-      tx.update(eventRef, { drawGenerated: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      tx.update(eventRef, {
+        drawGenerated: true,
+        drawError: null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
       return true;
     });
     if (!claimed) return;
 
-    const players = participants.map((uid) => ({
-      id: uid,
-      name: (after.participantNames && after.participantNames[uid]) || 'Player',
-      gender: '-',
-    }));
+    let players = basePlayers;
+    let numCourts = Math.max(1, Math.floor(capacity / 4));
+    let rounds = [];
 
-    const numCourts = Math.max(1, Math.floor(capacity / 4));
-    const numRounds = after.numRounds || 7;
-    const rounds = generateFullAmericanoSchedule(players, numCourts, numRounds) || [];
+    if (format === MIXED_AMERICANO_FORMAT) {
+      players = mixedResolved.players;
+      rounds = mixedResolved.rounds;
+      numCourts = 3;
+    } else {
+      const numRounds = after.numRounds || 7;
+      rounds = generateFullAmericanoSchedule(players, numCourts, numRounds) || [];
+    }
 
     // Split across two documents rather than one: fullDraw holds every
-    // round the moment it's generated, readable only by organizers —
-    // that's what "only I can see all 11 rounds upfront" actually
-    // means at the data layer, not just something the UI hides. draw
-    // is what every participant actually reads, and starts with just
-    // round 1; revealNextRoundOnComplete (below) is what grows it one
-    // round at a time as each round finishes. The generation itself —
+    // round for the server-side reveal trigger. Standard Americano
+    // organizers may read it; the fixed mixed format blocks that read
+    // in Firestore Rules so nobody can peek ahead. The live draw starts
+    // with Round 1 only and revealNextRoundOnComplete grows it one round
+    // at a time as each round finishes. The generation itself —
     // the actual pairing logic — runs exactly once, right here, same
     // as before; this only changes where the result gets written.
     await eventRef.collection('tournament').doc('fullDraw').set({
-      format: 'americano',
+      format,
       players,
       rounds,
       numCourts,
@@ -792,7 +930,7 @@ exports.generateDrawOnFull = onDocumentUpdated(
     });
 
     await eventRef.collection('tournament').doc('draw').set({
-      format: 'americano',
+      format,
       players,
       rounds: rounds.slice(0, 1),
       numCourts,
@@ -814,22 +952,26 @@ exports.generateDrawOnFull = onDocumentUpdated(
   },
 );
 
-function roundIsFullyScored(round) {
+function roundIsFullyScored(round, scoresOnly = false, pointsTarget = null) {
   if (!round || !round.courts || !round.courts.length) return false;
-  // Mirrors courtScoreIsFinal in events.html: confirmed === false means
-  // still being edited even if old score values are present, so it
-  // must not count as scored yet. confirmed === undefined (scores
-  // entered before this field existed) still counts, for the same
-  // backward-compatibility reason as the client-side version.
-  return round.courts.every((c) => c.scoreA != null && c.scoreB != null && c.confirmed !== false);
+  // The fixed mixed event advances as soon as all 3 courts have both
+  // scores entered and each match totals the configured target. It has
+  // no separate confirmation step. Legacy Americano events keep the
+  // existing confirm/edit semantics.
+  return round.courts.every((c) => {
+    if (c.scoreA == null || c.scoreB == null) return false;
+    if (scoresOnly && pointsTarget != null && c.scoreA + c.scoreB !== pointsTarget) return false;
+    return scoresOnly || c.confirmed !== false;
+  });
 }
 
 // The other half of "everyone else sees it unravel round by round" —
 // generateDrawOnFull above only ever writes round 1 into draw; this is
 // what grows it one round at a time from there, each time whatever is
-// currently the last round in draw becomes fully scored. Organizers
-// already see every round via fullDraw regardless of what this does;
-// this only ever affects what non-organizer participants can read.
+// currently the last round in draw becomes fully scored. Standard
+// Americano organizers can still see fullDraw; the fixed mixed format
+// blocks fullDraw reads for everyone, so this trigger is the only way
+// Round 2 onward becomes visible there.
 exports.revealNextRoundOnComplete = onDocumentUpdated(
   { document: 'padelEvents/{eventId}/tournament/draw', secrets: [vapidPrivateKey] },
   async (updateEvent) => {
@@ -837,7 +979,8 @@ exports.revealNextRoundOnComplete = onDocumentUpdated(
     if (!after || !after.rounds || !after.rounds.length) return;
 
     const lastRound = after.rounds[after.rounds.length - 1];
-    if (!roundIsFullyScored(lastRound)) return;
+    const scoresOnly = after.format === MIXED_AMERICANO_FORMAT;
+    if (!roundIsFullyScored(lastRound, scoresOnly, after.pointsTarget || null)) return;
 
     const eventId = updateEvent.params.eventId;
     const tournamentRef = db.collection('padelEvents').doc(eventId).collection('tournament');
