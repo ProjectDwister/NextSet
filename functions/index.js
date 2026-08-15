@@ -925,7 +925,7 @@ exports.generateDrawOnFull = onDocumentUpdated(
       players,
       rounds,
       numCourts,
-      pointsTarget: after.pointsTarget || 24,
+      pointsTarget: format === MIXED_AMERICANO_FORMAT ? null : (after.pointsTarget || 24),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -934,7 +934,7 @@ exports.generateDrawOnFull = onDocumentUpdated(
       players,
       rounds: rounds.slice(0, 1),
       numCourts,
-      pointsTarget: after.pointsTarget || 24,
+      pointsTarget: format === MIXED_AMERICANO_FORMAT ? null : (after.pointsTarget || 24),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -952,15 +952,14 @@ exports.generateDrawOnFull = onDocumentUpdated(
   },
 );
 
-function roundIsFullyScored(round, scoresOnly = false, pointsTarget = null) {
+function roundIsFullyScored(round, scoresOnly = false) {
   if (!round || !round.courts || !round.courts.length) return false;
-  // The fixed mixed event advances as soon as all 3 courts have both
-  // scores entered and each match totals the configured target. It has
-  // no separate confirmation step. Legacy Americano events keep the
-  // existing confirm/edit semantics.
+  // The fixed mixed event uses open scoring: any final score is valid.
+  // It advances as soon as all 3 courts have both sides entered, with
+  // no fixed total and no separate confirmation step. Legacy Americano
+  // events keep the existing confirm/edit semantics.
   return round.courts.every((c) => {
     if (c.scoreA == null || c.scoreB == null) return false;
-    if (scoresOnly && pointsTarget != null && c.scoreA + c.scoreB !== pointsTarget) return false;
     return scoresOnly || c.confirmed !== false;
   });
 }
@@ -980,7 +979,7 @@ exports.revealNextRoundOnComplete = onDocumentUpdated(
 
     const lastRound = after.rounds[after.rounds.length - 1];
     const scoresOnly = after.format === MIXED_AMERICANO_FORMAT;
-    if (!roundIsFullyScored(lastRound, scoresOnly, after.pointsTarget || null)) return;
+    if (!roundIsFullyScored(lastRound, scoresOnly)) return;
 
     const eventId = updateEvent.params.eventId;
     const tournamentRef = db.collection('padelEvents').doc(eventId).collection('tournament');
