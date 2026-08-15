@@ -6,6 +6,7 @@ on:
     paths:
       - 'functions/**'
       - 'firebase.json'
+      - 'firestore.rules'
       - '.firebaserc'
   workflow_dispatch:
 
@@ -36,5 +37,5 @@ jobs:
       - name: Sync VAPID private key to Firebase Secret Manager
         run: echo "${{ secrets.VAPID_PRIVATE_KEY }}" | firebase functions:secrets:set --data-file=- VAPID_PRIVATE_KEY --project games-scheduler-aa101
 
-      - name: Deploy functions
-        run: firebase deploy --only functions --project games-scheduler-aa101 --non-interactive --force
+      - name: Deploy functions and Firestore rules
+        run: firebase deploy --only functions,firestore:rules --project games-scheduler-aa101 --non-interactive --force
