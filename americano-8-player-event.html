@@ -295,9 +295,7 @@
   }
   .court-label { font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: .72; margin-bottom: 10px; }
   .team-row { display: grid; grid-template-columns: minmax(0,1fr) 58px; align-items: center; gap: 10px; }
-  .team-row.reverse { grid-template-columns: 58px minmax(0,1fr); }
   .team { min-width: 0; }
-  .team.reverse { text-align: right; }
   .player { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; font-weight: 800; line-height: 1.45; }
   .player.highlight { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
   .score {
@@ -886,12 +884,12 @@
                         value="${displayCourt.scoreA == null ? '' : displayCourt.scoreA}" ${readOnly ? 'readonly' : ''} />
                     </div>
                     <div class="net"></div>
-                    <div class="team-row reverse">
+                    <div class="team-row">
+                      <div class="team">${teamHtml(court.teamB)}</div>
                       <input class="score" type="number" min="0" max="999" inputmode="numeric"
                         aria-label="Round ${roundIndex + 1}, Court ${court.court}, Team B score"
                         data-score-input="${keyB}" data-round="${roundIndex}" data-court="${storageCourt}" data-field="scoreB"
                         value="${displayCourt.scoreB == null ? '' : displayCourt.scoreB}" ${readOnly ? 'readonly' : ''} />
-                      <div class="team reverse">${teamHtml(court.teamB)}</div>
                     </div>
                     <div class="court-warning${displayCourt.scoreA != null && displayCourt.scoreB != null && Number(displayCourt.scoreA) + Number(displayCourt.scoreB) === target ? ' ok' : ''}">${scoreWarning(displayCourt, target)}</div>
                   </article>`;

@@ -676,6 +676,17 @@ const GLOBAL_STYLES = `
 .rally-net-line::before { left: -4px; }
 .rally-net-line::after { right: -4px; }
 
+.rally-team-score-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+.rally-team-names {
+  min-width: 0;
+  text-align: left;
+}
+
 .rally-court-card .rally-score-input {
   width: 4.5rem;
   text-align: center;
@@ -1036,7 +1047,8 @@ function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, e
 
 function CreateEventForm({ onCreate, creating, error, creatorName }) {
   const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
+  const [startHour, setStartHour] = useState("");
+  const [startMinute, setStartMinute] = useState("00");
   const [durationMin, setDurationMin] = useState(120);
   const [location, setLocation] = useState("");
   const [courts, setCourts] = useState("");
@@ -1052,6 +1064,9 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
   const numCourts = Math.max(1, Math.floor(Number(capacity) / 4));
   const capacityValid = Number(capacity) >= 4 && Number(capacity) % 4 === 0;
   const perfectRounds = mixedFormat ? 6 : Math.max(1, Number(capacity) - 1);
+  const startTime = startHour ? `${startHour}:${startMinute}` : "";
+  const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minuteOptions = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
 
   useEffect(() => {
     if (mixedFormat) {
@@ -1139,9 +1154,23 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
           </div>
           <div>
             <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Start time</label>
-            <input type="time" step="1800" value={startTime} onChange={(e) => setStartTime(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg text-sm"
-              style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: "0.5rem" }}>
+              <select value={startHour} onChange={(e) => setStartHour(e.target.value)}
+                aria-label="Start hour"
+                className="w-full px-3 py-2.5 rounded-lg text-sm rally-tabular"
+                style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }}>
+                <option value="">HH</option>
+                {hourOptions.map((hour) => <option key={hour} value={hour}>{hour}</option>)}
+              </select>
+              <span className="text-sm font-bold" style={{ color: "var(--slate)" }}>:</span>
+              <select value={startMinute} onChange={(e) => setStartMinute(e.target.value)}
+                aria-label="Start minute"
+                className="w-full px-3 py-2.5 rounded-lg text-sm rally-tabular"
+                style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }}>
+                {minuteOptions.map((minute) => <option key={minute} value={minute}>{minute}</option>)}
+              </select>
+            </div>
+            <div className="text-xs mt-1" style={{ color: "var(--slate)" }}>24-hour time · hours and minutes only</div>
           </div>
         </div>
 
@@ -1808,7 +1837,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
 
 function EventTeamLabel({ players, ids, winning, align = "left" }) {
   return (
-    <div className={"min-w-0 flex-1" + (align === "right" ? " text-right" : "")}>
+    <div className={"rally-team-names" + (align === "right" ? " text-right" : "")}>
       {ids.map((id) => (
         <div key={id} className="text-sm font-bold truncate"
           style={{
@@ -1855,12 +1884,12 @@ function EventCourtCard({ court, players, editing, draftA, draftB, onChangeA, on
       <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--court-blue-ink)", opacity: 0.75 }}>
         Court #{court.court}
       </div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="rally-team-score-row">
         <EventTeamLabel players={players} ids={court.teamA} winning={aWins} />
         <ScoreDisplay value={displayA} editing={editing} onChange={onChangeA} ariaLabel="Team A score" />
       </div>
       <div className="rally-net-line my-3" />
-      <div className="flex items-center justify-between gap-3">
+      <div className="rally-team-score-row">
         <EventTeamLabel players={players} ids={court.teamB} winning={bWins} />
         <ScoreDisplay value={displayB} editing={editing} onChange={onChangeB} ariaLabel="Team B score" />
       </div>
