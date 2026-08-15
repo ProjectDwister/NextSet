@@ -911,6 +911,12 @@ function isMixedScorekeeperName(name) {
   return key === "pinder" || key === "neetul";
 }
 
+function isMixedRosterName(name) {
+  const key = normalizedFirstName(name);
+  return [...MIXED_AMERICANO_FEMALES, ...MIXED_AMERICANO_MALES]
+    .some((playerName) => normalizedFirstName(playerName) === key);
+}
+
 function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, error, theme, onThemeChange, onSignOut, onClose }) {
   return (
     <div
@@ -1061,6 +1067,7 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
   const [roundsManuallySet, setRoundsManuallySet] = useState(false);
 
   const mixedFormat = tournamentFormat === MIXED_AMERICANO_FORMAT;
+  const creatorIsMixedRosterPlayer = isMixedRosterName(creatorName);
   const numCourts = Math.max(1, Math.floor(Number(capacity) / 4));
   const capacityValid = Number(capacity) >= 4 && Number(capacity) % 4 === 0;
   const perfectRounds = mixedFormat ? 6 : Math.max(1, Number(capacity) - 1);
@@ -1074,13 +1081,17 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
       setNumRounds(6);
       setRoundsManuallySet(true);
       setCourts("Court #2, Court #3, Court #4");
-      setIAmPlaying(true);
+      // The fixed roster is authoritative. A creator outside those 12
+      // players remains an organizer/scorekeeper but is not counted as
+      // a participant. A creator whose profile matches the roster is
+      // automatically counted as a player.
+      setIAmPlaying(creatorIsMixedRosterPlayer);
     } else {
       setRoundsManuallySet(false);
       setNumRounds(suggestedRounds(Number(capacity) || 12));
       if (courts === "Court #2, Court #3, Court #4") setCourts("");
     }
-  }, [mixedFormat]);
+  }, [mixedFormat, creatorIsMixedRosterPlayer]);
 
   // Follows the suggested default as capacity changes, right up until
   // the person actually edits the rounds field themself — after that,
@@ -1094,7 +1105,6 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
   const handleSubmit = () => {
     if (!date || !startTime) return setLocalError("Pick a date and start time.");
     if (!location.trim()) return setLocalError("Add a venue.");
-    if (mixedFormat && !isMixedScorekeeperName(creatorName)) return setLocalError("Create this mixed event while signed in as Pinder or Neetul, so the scorekeeper permissions start correctly.");
     if (!capacityValid) return setLocalError("Total players must be a multiple of 4 (so every court stays full).");
     if (!Number(numRounds) || Number(numRounds) < 1) return setLocalError("Enter at least 1 round.");
     setLocalError("");
@@ -1140,6 +1150,7 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
             <div className="mt-2"><strong style={{ color: "var(--ink)" }}>Female:</strong> {MIXED_AMERICANO_FEMALES.join(", ")}</div>
             <div><strong style={{ color: "var(--ink)" }}>Male:</strong> {MIXED_AMERICANO_MALES.join(", ")}</div>
             <div className="mt-2">Use these player names when inviting/adding the roster. The draw is generated only when all 12 names are present.</div>
+            <div className="mt-2"><strong style={{ color: "var(--ink)" }}>Scorekeepers:</strong> The account creating this event is automatically an organizer even if not playing. After creating it, invite Pinder and Neetul as organizers so all three accounts can enter/edit scores.</div>
           </div>
         ) : null}
       </div>
@@ -1243,7 +1254,9 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
             <span className="text-sm font-semibold block" style={{ color: "var(--ink)" }}>I'll be playing</span>
             <span className="text-xs" style={{ color: "var(--slate)" }}>
               {mixedFormat
-                ? "Locked on for this fixed roster — Pinder and Neetul are both players as well as the two scorekeepers."
+                ? (creatorIsMixedRosterPlayer
+                    ? "Locked on because your profile name matches one of the fixed 12 players. You are also the event organizer/scorekeeper."
+                    : "Locked off because your profile is not one of the fixed 12 players. You will still be the event organizer/scorekeeper and can enter/edit scores.")
                 : "Uncheck this if you're only organizing — you'll still be the organizer either way, just not counted as one of the players."}
             </span>
           </span>
@@ -1364,10 +1377,10 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
     return () => { unsub1(); unsub2(); };
   }, [eventId, isOrganizer]);
 
-  const participants = Object.entries(event.participantNames || {});
+  const participants = (event.participants || []).map((uid) => [uid, (event.participantNames || {})[uid] || "Player"]);
   const organizers = event.organizers || [];
   const mixedEvent = isMixedAmericanoEvent(event);
-  const organizerLimit = mixedEvent ? 2 : 4;
+  const organizerLimit = mixedEvent ? 3 : 4;
   const spotsLeft = event.capacity - (event.participants || []).length;
   const iAmParticipant = (event.participants || []).includes(myUid);
   const canPickContact = contactPickerSupported();
@@ -1418,7 +1431,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
     const digits = orgPhone.replace(/[^0-9+]/g, "");
     if (!digits) return setOrgError("Enter a phone number.");
     if (mixedEvent && !orgName.trim()) return setOrgError("Enter Pinder or Neetul's name for this event.");
-    if (mixedEvent && !isMixedScorekeeperName(orgName)) return setOrgError("Only Pinder and Neetul should be organizers for this mixed event.");
+    if (mixedEvent && !isMixedScorekeeperName(orgName)) return setOrgError("For this mixed event, the additional organizer slots are reserved for Pinder and Neetul.");
     if (organizers.length >= organizerLimit) return setOrgError(`This event already has the maximum of ${organizerLimit} organizers.`);
     setSendingOrgInvite(true);
     setOrgError("");
@@ -1437,7 +1450,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
   const makeOrganizer = async (uid, personName) => {
     setOrgError("");
     if (mixedEvent && !isMixedScorekeeperName(personName)) {
-      setOrgError("Only Pinder and Neetul should be organizers for this mixed event.");
+      setOrgError("For this mixed event, the additional organizer slots are reserved for Pinder and Neetul.");
       return;
     }
     try {
@@ -1553,7 +1566,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
           <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Mixed Americano · fixed optimized draw</div>
           <div className="text-xs" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
             6 female + 6 male · 6 rounds · 3 courts. Every male/female partnership occurs exactly once.
-            Future rounds unlock only after all three courts in the current round have scores. Keep Pinder and Neetul as the only organizers so only they can score.
+            Future rounds unlock only after all three courts in the current round have scores. The event creator can score even when not playing; add Pinder and Neetul as the other two organizers/scorekeepers.
           </div>
         </div>
       ) : null}
@@ -1595,7 +1608,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
         <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizers</div>
         <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
           {mixedEvent
-            ? "For this event, keep only Pinder and Neetul as organizers. Only organizers can enter or edit scores."
+            ? "Up to 3 scorekeepers: the event creator plus Pinder and Neetul. Organizer access is tied to each signed-in Firebase account, not just the displayed name."
             : "Up to 4. Only organizers can invite, add, edit, or remove players, and manage scoring — whether or not they're playing themselves."}
         </div>
         {orgError ? (
@@ -2816,7 +2829,7 @@ function EventsApp() {
             <div>
               <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "0.5rem" }}>
                 <div className="text-xs" style={{ color: "var(--slate)" }}>
-                  Visible to you as an admin — you're not a player or organizer of these, viewing only.
+                  Other events visible to your signed-in account. Score editing still requires organizer access for that event.
                 </div>
               </div>
               <EventsList

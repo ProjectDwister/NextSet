@@ -128,16 +128,18 @@ export async function setOrganizerAlias(eventId, myUid, alias) {
   });
 }
 
-// Add or remove an organizer. The 4-organizer cap is enforced by the
-// security rules regardless — this just gives a clear error up front
-// instead of letting the write round-trip and fail.
+// Add or remove an organizer. Standard events allow up to 4; the
+// fixed mixed event allows the creator plus Pinder and Neetul (3 total).
+// Security Rules enforce the same cap; this just gives a clear error
+// before letting the write round-trip and fail.
 export async function addOrganizer(eventId, uid, name) {
   const snap = await getDoc(doc(db, PADEL_EVENTS, eventId));
   if (!snap.exists()) throw new Error('This event no longer exists.');
   const data = snap.data();
   const organizers = data.organizers || [];
   if (organizers.includes(uid)) return;
-  if (organizers.length >= 4) throw new Error('An event can have at most 4 organizers.');
+  const organizerLimit = data.tournamentFormat === 'mixed-americano-6x6' ? 3 : 4;
+  if (organizers.length >= organizerLimit) throw new Error(`This event can have at most ${organizerLimit} organizers.`);
   await updateDoc(doc(db, PADEL_EVENTS, eventId), {
     organizers: [...organizers, uid],
     participantNames: { ...(data.participantNames || {}), [uid]: name || data.participantNames?.[uid] || '' },
@@ -494,8 +496,9 @@ export async function acceptOrganizerInvite(eventId, invitedPhone, myUid, myName
     const data = snap.data();
     const organizers = data.organizers || [];
     if (organizers.includes(myUid)) return; // already an organizer, nothing to do
-    if (organizers.length >= 4) {
-      throw new Error('This event already has the maximum of 4 organizers.');
+    const organizerLimit = data.tournamentFormat === 'mixed-americano-6x6' ? 3 : 4;
+    if (organizers.length >= organizerLimit) {
+      throw new Error(`This event already has the maximum of ${organizerLimit} organizers.`);
     }
     tx.update(eventRef, {
       organizers: [...organizers, myUid],

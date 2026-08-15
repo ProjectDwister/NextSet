@@ -22,7 +22,9 @@ The Cloud Function normalizes case/whitespace and accepts a longer display name 
 - No opponent pair occurs more than twice in the fixed draw.
 - Only organizers can write scores; Firestore Rules cap this mixed format at 2 organizers.
 - For this event, future rounds are not readable even by organizers. Round N+1 is copied into the live draw only after all three courts in Round N have both scores entered.
-- Standings react live as score fields are entered; no Confirm button is required for the mixed format.
+- Scoring is **open-ended**: there is no 24-point target and the two team scores do not need to add to any fixed total. Enter the actual final score from each court.
+- Round N+1 unlocks automatically once **both team scores are entered on all three courts** in Round N.
+- Standings react live as soon as both sides of a match have scores; no Confirm button is required for the mixed format.
 
 ## Organizer setup
 
@@ -68,3 +70,12 @@ Manual fallback, from the repo root, if the GitHub Action is not configured or f
 - No opponent pairing occurs more than twice.
 - Opponent distribution across all 66 player-pairs: 48 pairs meet once, 12 meet twice, 6 do not meet.
 - Court appearances stay between 1 and 3 on each physical court. Krish and Shweta are exactly 2/2/2; the other players are 3/2/1 in some order.
+
+
+## Scorekeeper authentication
+
+For this fixed mixed event, the account that creates the event is automatically the first organizer/scorekeeper even if that person is not one of the 12 players. The creator should leave the mixed-format "I'll be playing" state as shown by the app; it is locked off automatically when the creator's profile name is not in the fixed roster.
+
+Pinder and Neetul receive separate organizer invitations using the phone numbers tied to their Court Pop/Firebase Auth accounts. Each must sign in with that same verified phone number and accept the organizer invitation. Acceptance adds that account's Firebase UID to the event's `organizers` array. Score writes are authorized against those organizer UIDs, not against display-name text.
+
+The mixed event therefore supports up to three organizers/scorekeepers: the creator, Pinder, and Neetul.

@@ -281,7 +281,8 @@ service cloud.firestore {
       // An organizer can change anything, including reassigning who
       // the organizer(s) are — that's the actual mechanism for "make
       // someone else the organizer," not a separate admin override.
-      // Capped at 4 regardless of which branch touches the field, an
+      // Standard events cap at 4; the fixed mixed event caps at 3 so the
+      // creator can remain a non-playing scorekeeper alongside Pinder and Neetul. An
       // organizer doesn't have to be one of the players, and someone
       // playing isn't automatically an organizer just for being one of
       // the 12. Accepting a player invite only ever grants adding
@@ -300,7 +301,7 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && (
           (resource.data.tournamentFormat == 'mixed-americano-6x6'
-            && request.resource.data.organizers.size() <= 2)
+            && request.resource.data.organizers.size() <= 3)
           ||
           (resource.data.tournamentFormat != 'mixed-americano-6x6'
             && request.resource.data.organizers.size() <= 4)
