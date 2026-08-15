@@ -2159,6 +2159,16 @@ function EventFull({ event, eventId, isOrganizer, myUid }) {
   const [mixedOrgError, setMixedOrgError] = useState("");
   const [sentMixedOrgInvites, setSentMixedOrgInvites] = useState([]);
 
+  // Used by the WhatsApp buttons in the mixed-event scorekeeper section.
+  // This must live inside EventFull (or at module scope); the similarly named
+  // style in EventNotFull is not visible here. Keeping it local prevents a
+  // pending organizer invite from throwing during render and blanking the page.
+  const whatsAppButtonStyle = {
+    display: "block", width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12,
+    background: "var(--court-blue)", color: "var(--court-blue-ink)", fontWeight: 600, fontSize: "0.9rem",
+    textAlign: "center", textDecoration: "none", marginTop: 10,
+  };
+
   useEffect(() => {
     const unsub = watchPadelTournament(eventId, (t) => setTournament(t), () => {});
     return () => unsub();
