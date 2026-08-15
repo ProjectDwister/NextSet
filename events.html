@@ -2125,165 +2125,6 @@ function EventStandings({ tournament }) {
 }
 
 
-function unorderedPairKey(a, b) {
-  return a < b ? `${a}__${b}` : `${b}__${a}`;
-}
-
-function buildMixedDrawAudit(fullDraw) {
-  if (!fullDraw || !fullDraw.players || !fullDraw.rounds) return null;
-  const players = fullDraw.players;
-  const ids = players.map((p) => p.id);
-  const byId = new Map(players.map((p) => [p.id, p]));
-  const games = Object.fromEntries(ids.map((id) => [id, 0]));
-  const courtCounts = Object.fromEntries(ids.map((id) => [id, { 2: 0, 3: 0, 4: 0 }]));
-  const partnerCounts = new Map();
-  const opponentCounts = new Map();
-
-  const bump = (map, a, b) => {
-    const key = unorderedPairKey(a, b);
-    map.set(key, (map.get(key) || 0) + 1);
-  };
-
-  fullDraw.rounds.forEach((round) => {
-    (round.courts || []).forEach((court) => {
-      const all = [...court.teamA, ...court.teamB];
-      all.forEach((id) => {
-        games[id] = (games[id] || 0) + 1;
-        if (!courtCounts[id]) courtCounts[id] = { 2: 0, 3: 0, 4: 0 };
-        courtCounts[id][court.court] = (courtCounts[id][court.court] || 0) + 1;
-      });
-      bump(partnerCounts, court.teamA[0], court.teamA[1]);
-      bump(partnerCounts, court.teamB[0], court.teamB[1]);
-      court.teamA.forEach((a) => court.teamB.forEach((b) => bump(opponentCounts, a, b)));
-    });
-  });
-
-  let exactMixedPartnerships = 0;
-  let sameGenderPartnerships = 0;
-  let opponentZero = 0;
-  let opponentOnce = 0;
-  let opponentTwice = 0;
-  let opponentThreePlus = 0;
-  let maxOpponentRepeat = 0;
-
-  for (let i = 0; i < ids.length; i += 1) {
-    for (let j = i + 1; j < ids.length; j += 1) {
-      const a = ids[i];
-      const b = ids[j];
-      const key = unorderedPairKey(a, b);
-      const partners = partnerCounts.get(key) || 0;
-      const opponents = opponentCounts.get(key) || 0;
-      const sameGender = byId.get(a)?.gender === byId.get(b)?.gender;
-      if (sameGender) sameGenderPartnerships += partners;
-      if (!sameGender && partners === 1) exactMixedPartnerships += 1;
-      if (opponents === 0) opponentZero += 1;
-      else if (opponents === 1) opponentOnce += 1;
-      else if (opponents === 2) opponentTwice += 1;
-      else opponentThreePlus += 1;
-      maxOpponentRepeat = Math.max(maxOpponentRepeat, opponents);
-    }
-  }
-
-  const rows = players.map((player) => {
-    const others = ids.filter((id) => id !== player.id);
-    const uniquePartners = others.filter((id) => (partnerCounts.get(unorderedPairKey(player.id, id)) || 0) > 0).length;
-    const uniqueOpponents = others.filter((id) => (opponentCounts.get(unorderedPairKey(player.id, id)) || 0) > 0).length;
-    const playerMaxOpponentRepeat = Math.max(0, ...others.map((id) => opponentCounts.get(unorderedPairKey(player.id, id)) || 0));
-    const courts = courtCounts[player.id] || { 2: 0, 3: 0, 4: 0 };
-    return {
-      name: player.name,
-      gender: player.gender,
-      games: games[player.id] || 0,
-      uniquePartners,
-      uniqueOpponents,
-      maxOpponentRepeat: playerMaxOpponentRepeat,
-      court2: courts[2] || 0,
-      court3: courts[3] || 0,
-      court4: courts[4] || 0,
-    };
-  });
-
-  return {
-    rows,
-    allSixGames: rows.every((r) => r.games === 6),
-    partnershipsPerfect: exactMixedPartnerships === 36 && sameGenderPartnerships === 0 && rows.every((r) => r.uniquePartners === 6),
-    exactMixedPartnerships,
-    sameGenderPartnerships,
-    maxOpponentRepeat,
-    opponentZero,
-    opponentOnce,
-    opponentTwice,
-    opponentThreePlus,
-    allThreeCourts: rows.every((r) => r.court2 > 0 && r.court3 > 0 && r.court4 > 0),
-  };
-}
-
-function MixedDrawAudit({ fullDraw }) {
-  const audit = useMemo(() => buildMixedDrawAudit(fullDraw), [fullDraw]);
-  if (!audit) return null;
-  const ok = audit.allSixGames && audit.partnershipsPerfect && audit.maxOpponentRepeat <= 2 && audit.opponentThreePlus === 0 && audit.allThreeCourts;
-  return (
-    <div className="rally-card p-4 mb-5" style={{ borderColor: ok ? "var(--court-blue)" : "var(--danger)" }}>
-      <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizer draw audit · full 6-round schedule</div>
-      <div className="text-xs mb-3" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
-        This section is organizer-only. Players still see rounds one at a time on the live scoring draw.
-      </div>
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.allSixGames ? "var(--ink)" : "var(--danger)" }}>
-          {audit.allSixGames ? "✓" : "✕"} 6 games each
-        </div>
-        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.partnershipsPerfect ? "var(--ink)" : "var(--danger)" }}>
-          {audit.partnershipsPerfect ? "✓" : "✕"} 36/36 mixed partnerships
-        </div>
-        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.sameGenderPartnerships === 0 ? "var(--ink)" : "var(--danger)" }}>
-          {audit.sameGenderPartnerships === 0 ? "✓" : "✕"} 0 same-gender partnerships
-        </div>
-        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.maxOpponentRepeat <= 2 ? "var(--ink)" : "var(--danger)" }}>
-          {audit.maxOpponentRepeat <= 2 ? "✓" : "✕"} max opponent repeat {audit.maxOpponentRepeat}
-        </div>
-        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.opponentThreePlus === 0 ? "var(--ink)" : "var(--danger)" }}>
-          Opponents: {audit.opponentOnce}× once · {audit.opponentTwice}× twice · {audit.opponentZero}× never
-        </div>
-        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.allThreeCourts ? "var(--ink)" : "var(--danger)" }}>
-          {audit.allThreeCourts ? "✓" : "✕"} everyone uses Courts #2, #3 and #4
-        </div>
-      </div>
-
-      <div className="text-xs font-bold uppercase mb-2" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>Full draw</div>
-      {fullDraw.rounds.map((round, roundIndex) => (
-        <div key={roundIndex} className="mb-3" style={{ borderTop: roundIndex ? "1px solid var(--line)" : "none", paddingTop: roundIndex ? "0.75rem" : 0 }}>
-          <div className="text-sm font-bold mb-1.5" style={{ color: "var(--ink)" }}>Round {roundIndex + 1}</div>
-          {round.courts.map((court) => (
-            <div key={court.court} className="text-xs py-1" style={{ color: "var(--ink)" }}>
-              <strong>Court #{court.court}:</strong> {court.teamA.map((id) => playerName(fullDraw.players, id)).join(" & ")}
-              {" vs "}
-              {court.teamB.map((id) => playerName(fullDraw.players, id)).join(" & ")}
-            </div>
-          ))}
-        </div>
-      ))}
-
-      <div className="text-xs font-bold uppercase mt-4 mb-2" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>Player-by-player audit</div>
-      <div style={{ overflowX: "auto" }}>
-        <table className="w-full text-xs rally-tabular" style={{ borderCollapse: "collapse", minWidth: "560px" }}>
-          <thead>
-            <tr style={{ color: "var(--slate)" }}>
-              <th className="text-left py-2">Player</th><th className="text-center">G</th><th className="text-center">Partners</th><th className="text-center">Opp.</th><th className="text-center">Max rep.</th><th className="text-center">C2</th><th className="text-center">C3</th><th className="text-center">C4</th>
-            </tr>
-          </thead>
-          <tbody>
-            {audit.rows.map((row) => (
-              <tr key={row.name} style={{ borderTop: "1px solid var(--line)", color: "var(--ink)" }}>
-                <td className="py-2 font-semibold">{row.name}</td><td className="text-center">{row.gender}</td><td className="text-center">{row.uniquePartners}</td><td className="text-center">{row.uniqueOpponents}</td><td className="text-center">{row.maxOpponentRepeat}</td><td className="text-center">{row.court2}</td><td className="text-center">{row.court3}</td><td className="text-center">{row.court4}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function EventFull({ event, eventId, isOrganizer, myUid }) {
   const mixedEvent = isMixedAmericanoEvent(event);
   const [tournament, setTournament] = useState(null);
@@ -2557,8 +2398,6 @@ function EventFull({ event, eventId, isOrganizer, myUid }) {
 
       {mixedEvent ? (
         <React.Fragment>
-          {isOrganizer && fullDraw ? <MixedDrawAudit fullDraw={fullDraw} /> : null}
-
           <div className="rally-card p-4 mb-5" style={{ borderColor: "var(--court-blue)" }}>
             <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Live Scores & Standings</div>
             <div className="text-xs mb-3" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
@@ -2596,9 +2435,7 @@ function EventFull({ event, eventId, isOrganizer, myUid }) {
         </button>
       </div>
 
-      {isOrganizer && mixedEvent && fullDraw ? (
-        <MixedDrawAudit fullDraw={fullDraw} />
-      ) : isOrganizer && fullDraw && fullDraw.rounds.length > tournament.rounds.length ? (
+      {isOrganizer && fullDraw && fullDraw.rounds.length > tournament.rounds.length ? (
         <div className="rally-card p-4 mb-5">
           <button type="button" onClick={() => setShowUpcoming(!showUpcoming)}
             className="text-sm font-bold w-full text-left flex items-center justify-between" style={{ color: "var(--ink)" }}>
