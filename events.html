@@ -1309,15 +1309,29 @@ async function pickContactFromPhone(myPhone) {
 // Business API. Not automatic, just one tap shorter than typing the
 // whole thing by hand.
 function appUrlForSharing() {
-  return window.location.origin + window.location.pathname;
+  const url = new URL('events.html', window.location.href);
+  url.search = '';
+  url.hash = '';
+  return url.toString();
 }
 
-function buildEventInviteMessage(ev, invitedName, asOrganizer) {
+function organizerInviteUrl(eventId) {
+  const url = new URL('events.html', window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('organizerInvite', eventId);
+  return url.toString();
+}
+
+function buildEventInviteMessage(ev, invitedName, asOrganizer, eventId = '') {
   const where = ev.location + (ev.courts ? ` (${ev.courts})` : "");
-  const role = asOrganizer ? "to help organize a padel event" : "to a padel event";
+  const role = asOrganizer ? "as an organizer / scorekeeper for a padel event" : "to a padel event";
+  const destination = asOrganizer && eventId ? organizerInviteUrl(eventId) : appUrlForSharing();
+  const afterSignIn = asOrganizer
+    ? "sign in with this same phone number, accept the organizer invitation, and Court Pop will take you straight to Scores & Standings."
+    : "sign in with this number to see it and accept.";
   return `Hey${invitedName ? " " + invitedName : ""}! I've invited you ${role} — `
-    + `${formatEventWhen(ev)} at ${where}. Open ${appUrlForSharing()} and sign in with `
-    + `this number to see it and accept.`;
+    + `${formatEventWhen(ev)} at ${where}. Open ${destination} and ${afterSignIn}`;
 }
 
 function buildWhatsAppLink(phone, message) {
@@ -1723,7 +1737,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
               {sendingOrgInvite ? "Sending…" : "Invite as organizer"}
             </button>
             {lastOrgInvite ? (
-              <a href={buildWhatsAppLink(lastOrgInvite.phone, buildEventInviteMessage(event, lastOrgInvite.name, true))}
+              <a href={buildWhatsAppLink(lastOrgInvite.phone, buildEventInviteMessage(event, lastOrgInvite.name, true, eventId))}
                 target="_blank" rel="noopener" style={whatsAppButtonStyle}>
                 Open WhatsApp to let them know
               </a>
@@ -2388,7 +2402,13 @@ function EventFull({ event, eventId, isOrganizer, myUid }) {
                   </div>
                 ) : null}
                 {state.phone && state.status !== "accepted" ? (
-                  <div className="text-xs mt-1" style={{ color: "var(--slate)" }}>Last invite: {state.phone}</div>
+                  <React.Fragment>
+                    <div className="text-xs mt-1" style={{ color: "var(--slate)" }}>Last invite: {state.phone}</div>
+                    <a href={buildWhatsAppLink(state.phone, buildEventInviteMessage(event, personName, true, eventId))}
+                      target="_blank" rel="noopener" style={whatsAppButtonStyle}>
+                      Send WhatsApp invite
+                    </a>
+                  </React.Fragment>
                 ) : null}
               </div>
             );
@@ -2571,6 +2591,7 @@ function EventsApp() {
   const [createError, setCreateError] = useState("");
   const [inviteBusyId, setInviteBusyId] = useState(null);
   const [acceptError, setAcceptError] = useState("");
+  const organizerInviteEventId = new URLSearchParams(window.location.search).get('organizerInvite') || '';
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuName, setMenuName] = useState("");
@@ -2583,7 +2604,11 @@ function EventsApp() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        location.replace("index.html?nav=1");
+        const returnTo = location.pathname.split('/').pop() + location.search;
+        const url = new URL('index.html', location.href);
+        url.searchParams.set('nav', '1');
+        url.searchParams.set('returnTo', returnTo);
+        location.replace(url.toString());
         return;
       }
       setUid(user.uid);
@@ -2651,6 +2676,17 @@ function EventsApp() {
     );
     return () => unsub();
   }, [uid]);
+
+  useEffect(() => {
+    if (!loaded || !uid || !organizerInviteEventId) return;
+    const alreadyOrganizer = myEvents.find((ev) =>
+      ev.id === organizerInviteEventId
+      && ev.tournamentFormat === MIXED_AMERICANO_FORMAT
+      && (ev.organizers || []).includes(uid));
+    if (alreadyOrganizer) {
+      location.replace(`mixed-americano-12-event.html?event=${encodeURIComponent(organizerInviteEventId)}`);
+    }
+  }, [loaded, uid, organizerInviteEventId, myEvents]);
 
   function applyTheme(next) {
     const normalized = next === "light" ? "light" : "dark";
@@ -2721,6 +2757,10 @@ function EventsApp() {
     setAcceptError("");
     try {
       await acceptOrganizerInvite(inv.eventId, inv.id, uid, profile.name);
+      if (organizerInviteEventId && inv.eventId === organizerInviteEventId) {
+        location.replace(`mixed-americano-12-event.html?event=${encodeURIComponent(inv.eventId)}`);
+        return;
+      }
       setSelectedId(inv.eventId);
     } catch (e) {
       console.error('acceptOrganizerInvite failed:', e);
@@ -2964,13 +3004,30 @@ function EventsApp() {
               </div>
             </div>
           ) : null}
-          <InvitationsSection invites={myInvites} onAccept={handleAcceptInvite} onDecline={handleDeclineInvite}
-            organizerInvites={myOrganizerInvites} onAcceptOrganizer={handleAcceptOrganizerInvite} onDeclineOrganizer={handleDeclineOrganizerInvite}
+          {organizerInviteEventId
+            && !myOrganizerInvites.some((inv) => inv.eventId === organizerInviteEventId)
+            && !myEvents.some((ev) => ev.id === organizerInviteEventId && (ev.organizers || []).includes(uid)) ? (
+            <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "1rem" }}>
+              <div className="rally-card p-4" style={{ borderColor: "var(--ball)" }}>
+                <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizer invitation not found for this account</div>
+                <div className="text-xs" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
+                  Sign in with the same phone number that received the WhatsApp invitation. The link itself does not grant access; Firebase verifies the invited phone number before the organizer role can be accepted.
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <InvitationsSection
+            invites={organizerInviteEventId ? [] : myInvites}
+            onAccept={handleAcceptInvite}
+            onDecline={handleDeclineInvite}
+            organizerInvites={organizerInviteEventId ? myOrganizerInvites.filter((inv) => inv.eventId === organizerInviteEventId) : myOrganizerInvites}
+            onAcceptOrganizer={handleAcceptOrganizerInvite}
+            onDeclineOrganizer={handleDeclineOrganizerInvite}
             busyId={inviteBusyId} />
 
-          {myEvents.length ? <EventsList events={myEvents} onSelect={setSelectedId} /> : null}
+          {!organizerInviteEventId && myEvents.length ? <EventsList events={myEvents} onSelect={setSelectedId} /> : null}
 
-          {otherVisibleAdminEvents.length ? (
+          {!organizerInviteEventId && otherVisibleAdminEvents.length ? (
             <div>
               <div className="max-w-xl mx-auto px-4" style={{ paddingBottom: "0.5rem" }}>
                 <div className="text-xs" style={{ color: "var(--slate)" }}>
@@ -2986,7 +3043,7 @@ function EventsApp() {
           ) : null}
 
           <div className="max-w-xl mx-auto px-4">
-            {myEvents.length ? (
+            {!organizerInviteEventId && myEvents.length ? (
               <button type="button" onClick={() => setSelectedId("__new__")}
                 className="rally-btn-primary w-full py-3 text-sm mb-5">
                 + Create another event
@@ -2994,7 +3051,7 @@ function EventsApp() {
             ) : null}
           </div>
 
-          {!myEvents.length ? (
+          {!organizerInviteEventId && !myEvents.length ? (
             <CreateEventForm onCreate={handleCreate} creating={creating} error={createError} creatorName={profile.name} />
           ) : null}
         </div>

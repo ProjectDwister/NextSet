@@ -831,8 +831,27 @@
       recentInvitees = result;
     }
 
+    function authReturnTarget() {
+      const raw = new URLSearchParams(location.search).get('returnTo');
+      if (!raw) return null;
+      try {
+        const resolved = new URL(raw, location.href);
+        if (resolved.origin !== location.origin) return null;
+        const file = resolved.pathname.split('/').pop();
+        if (!['events.html', 'mixed-americano-12-event.html'].includes(file)) return null;
+        return file + resolved.search + resolved.hash;
+      } catch (e) {
+        return null;
+      }
+    }
+
     function enterApp(profile) {
       currentProfile = profile;
+      const returnTarget = authReturnTarget();
+      if (returnTarget) {
+        location.replace(returnTarget);
+        return;
+      }
       showView('app');
       clearAppError();
       if (unsubscribeEvents) unsubscribeEvents();
