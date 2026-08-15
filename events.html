@@ -502,6 +502,7 @@ import {
   toTimestamp,
   getPadelEvent,
   createPadelEvent,
+  ensureFixedMixedRoster,
   updatePadelEvent,
   addOrganizer,
   removeOrganizer,
@@ -911,12 +912,6 @@ function isMixedScorekeeperName(name) {
   return key === "pinder" || key === "neetul";
 }
 
-function isMixedRosterName(name) {
-  const key = normalizedFirstName(name);
-  return [...MIXED_AMERICANO_FEMALES, ...MIXED_AMERICANO_MALES]
-    .some((playerName) => normalizedFirstName(playerName) === key);
-}
-
 function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, error, theme, onThemeChange, onSignOut, onClose }) {
   return (
     <div
@@ -1067,7 +1062,6 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
   const [roundsManuallySet, setRoundsManuallySet] = useState(false);
 
   const mixedFormat = tournamentFormat === MIXED_AMERICANO_FORMAT;
-  const creatorIsMixedRosterPlayer = isMixedRosterName(creatorName);
   const numCourts = Math.max(1, Math.floor(Number(capacity) / 4));
   const capacityValid = Number(capacity) >= 4 && Number(capacity) % 4 === 0;
   const perfectRounds = mixedFormat ? 6 : Math.max(1, Number(capacity) - 1);
@@ -1081,17 +1075,16 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
       setNumRounds(6);
       setRoundsManuallySet(true);
       setCourts("Court #2, Court #3, Court #4");
-      // The fixed roster is authoritative. A creator outside those 12
-      // players remains an organizer/scorekeeper but is not counted as
-      // a participant. A creator whose profile matches the roster is
-      // automatically counted as a player.
-      setIAmPlaying(creatorIsMixedRosterPlayer);
+      // The fixed roster is auto-seeded with its own stable player ids.
+      // The account creating the event stays organizer-only, even if its
+      // profile name happens to match one of the 12 players.
+      setIAmPlaying(false);
     } else {
       setRoundsManuallySet(false);
       setNumRounds(suggestedRounds(Number(capacity) || 12));
       if (courts === "Court #2, Court #3, Court #4") setCourts("");
     }
-  }, [mixedFormat, creatorIsMixedRosterPlayer]);
+  }, [mixedFormat]);
 
   // Follows the suggested default as capacity changes, right up until
   // the person actually edits the rounds field themself — after that,
@@ -1149,7 +1142,7 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
             <div><strong style={{ color: "var(--ink)" }}>Fixed setup:</strong> 12 players · 6 rounds · Court #2, Court #3 and Court #4.</div>
             <div className="mt-2"><strong style={{ color: "var(--ink)" }}>Female:</strong> {MIXED_AMERICANO_FEMALES.join(", ")}</div>
             <div><strong style={{ color: "var(--ink)" }}>Male:</strong> {MIXED_AMERICANO_MALES.join(", ")}</div>
-            <div className="mt-2">Use these player names when inviting/adding the roster. The draw is generated only when all 12 names are present.</div>
+            <div className="mt-2"><strong style={{ color: "var(--ink)" }}>Automatic roster:</strong> all 12 players are added when you create the event. You do not need to invite or add players one by one.</div>
             <div className="mt-2"><strong style={{ color: "var(--ink)" }}>Scorekeepers:</strong> The account creating this event is automatically an organizer even if not playing. After creating it, invite Pinder and Neetul as organizers so all three accounts can enter/edit scores.</div>
           </div>
         ) : null}
@@ -1246,22 +1239,27 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
           style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)", resize: "vertical" }} />
       </div>
 
-      <div className="rally-card p-4 mb-5">
-        <label className="flex items-start gap-3" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={iAmPlaying} disabled={mixedFormat} onChange={(e) => setIAmPlaying(e.target.checked)}
-            className="mt-0.5" style={{ width: "auto", flexShrink: 0 }} />
-          <span>
-            <span className="text-sm font-semibold block" style={{ color: "var(--ink)" }}>I'll be playing</span>
-            <span className="text-xs" style={{ color: "var(--slate)" }}>
-              {mixedFormat
-                ? (creatorIsMixedRosterPlayer
-                    ? "Locked on because your profile name matches one of the fixed 12 players. You are also the event organizer/scorekeeper."
-                    : "Locked off because your profile is not one of the fixed 12 players. You will still be the event organizer/scorekeeper and can enter/edit scores.")
-                : "Uncheck this if you're only organizing — you'll still be the organizer either way, just not counted as one of the players."}
+      {mixedFormat ? (
+        <div className="rally-card p-4 mb-5">
+          <div className="text-sm font-semibold mb-1" style={{ color: "var(--ink)" }}>Fixed roster will be added automatically</div>
+          <div className="text-xs" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
+            Your signed-in account will be the event creator and scorekeeper, but it will not be counted as a player. The 12 named players above are loaded automatically as the tournament roster.
+          </div>
+        </div>
+      ) : (
+        <div className="rally-card p-4 mb-5">
+          <label className="flex items-start gap-3" style={{ cursor: "pointer" }}>
+            <input type="checkbox" checked={iAmPlaying} onChange={(e) => setIAmPlaying(e.target.checked)}
+              className="mt-0.5" style={{ width: "auto", flexShrink: 0 }} />
+            <span>
+              <span className="text-sm font-semibold block" style={{ color: "var(--ink)" }}>I'll be playing</span>
+              <span className="text-xs" style={{ color: "var(--slate)" }}>
+                Uncheck this if you're only organizing — you'll still be the organizer either way, just not counted as one of the players.
+              </span>
             </span>
-          </span>
-        </label>
-      </div>
+          </label>
+        </div>
+      )}
 
       <button type="button" onClick={handleSubmit} disabled={creating}
         className="rally-btn-primary w-full py-3.5 text-sm">
@@ -1369,6 +1367,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
   const [editingAlias, setEditingAlias] = useState(false);
   const [savingAlias, setSavingAlias] = useState(false);
   const [sentOrgInvites, setSentOrgInvites] = useState([]);
+  const [rosterSeedError, setRosterSeedError] = useState("");
 
   useEffect(() => {
     if (!isOrganizer) return;
@@ -1376,6 +1375,15 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
     const unsub2 = watchSentOrganizerInvites(eventId, setSentOrgInvites, () => {});
     return () => { unsub1(); unsub2(); };
   }, [eventId, isOrganizer]);
+
+  useEffect(() => {
+    if (!isOrganizer || !isMixedAmericanoEvent(event) || (event.participants || []).length === 12) return;
+    let cancelled = false;
+    setRosterSeedError("");
+    ensureFixedMixedRoster(eventId, myUid, (event.participantNames || {})[myUid] || "Organizer")
+      .catch((e) => { if (!cancelled) setRosterSeedError(e && e.message ? e.message : "Could not load the fixed roster."); });
+    return () => { cancelled = true; };
+  }, [eventId, isOrganizer, myUid, event.tournamentFormat, (event.participants || []).length]);
 
   const participants = (event.participants || []).map((uid) => [uid, (event.participantNames || {})[uid] || "Player"]);
   const organizers = event.organizers || [];
@@ -1561,12 +1569,18 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
         </div>
       ) : null}
 
+      {rosterSeedError ? (
+        <div className="text-sm font-semibold mb-4 px-3 py-2.5 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+          {rosterSeedError}
+        </div>
+      ) : null}
+
       {mixedEvent ? (
         <div className="rally-card p-4 mb-4" style={{ borderColor: "var(--court-blue)" }}>
           <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Mixed Americano · fixed optimized draw</div>
           <div className="text-xs" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
-            6 female + 6 male · 6 rounds · 3 courts. Every male/female partnership occurs exactly once.
-            Future rounds unlock only after all three courts in the current round have scores. The event creator can score even when not playing; add Pinder and Neetul as the other two organizers/scorekeepers.
+            6 female + 6 male · 6 rounds · 3 courts. The complete fixed roster is loaded automatically and every male/female partnership occurs exactly once.
+            Players see rounds sequentially; the organizer can inspect the full six-round draw and audit immediately. The event creator can score even when not playing; invite Pinder and Neetul as the other two organizers/scorekeepers.
           </div>
         </div>
       ) : null}
@@ -1657,9 +1671,9 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
           )
         ) : null}
 
-        {isOrganizer && organizers.length < organizerLimit && participants.some(([uid, pname]) => !organizers.includes(uid) && (!mixedEvent || isMixedScorekeeperName(pname))) ? (
+        {isOrganizer && !mixedEvent && organizers.length < organizerLimit && participants.some(([uid]) => !organizers.includes(uid)) ? (
           <div className="flex flex-wrap gap-1.5 mb-3">
-            {participants.filter(([uid, pname]) => !organizers.includes(uid) && (!mixedEvent || isMixedScorekeeperName(pname))).map(([uid, pname]) => (
+            {participants.filter(([uid]) => !organizers.includes(uid)).map(([uid, pname]) => (
               <button key={uid} type="button" onClick={() => makeOrganizer(uid, pname)}
                 className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{ width: "auto", border: "1px dashed var(--line-strong)", color: "var(--slate)" }}>
@@ -1673,7 +1687,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
           <React.Fragment>
             <div style={{ height: 1, background: "var(--line)", margin: "12px 0" }} />
             <div className="text-xs font-semibold mb-2" style={{ color: "var(--slate)" }}>
-              Or invite someone by phone — they don't need to be a player
+              {mixedEvent ? "Invite Pinder or Neetul by phone for authenticated scoring access" : "Or invite someone by phone — they don't need to be a player"}
             </div>
             {canPickContact ? (
               <button type="button" onClick={handlePickOrganizerContact}
@@ -1708,15 +1722,15 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
       <div className="rally-card p-4 mb-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-bold" style={{ color: "var(--ink)" }}>
-            {(event.participants || []).length} / {event.capacity} joined
+            {mixedEvent ? `${event.capacity} / ${event.capacity} fixed roster` : `${(event.participants || []).length} / ${event.capacity} joined`}
           </span>
           <span className="rally-chip px-3 py-1 text-xs font-semibold" style={{ color: "var(--slate)" }}>
-            {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left` : "Full — generating draw…"}
+            {mixedEvent ? (event.drawGenerated ? "Roster loaded" : "Roster loaded — generating draw…") : (spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft === 1 ? "" : "s"} left` : "Full — generating draw…")}
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {participants.filter(([uid]) => (event.participants || []).includes(uid)).map(([uid, pname]) => {
-            const canRemove = uid === myUid || isOrganizer;
+            const canRemove = !mixedEvent && (uid === myUid || isOrganizer);
             if (editingUid === uid) {
               return (
                 <span key={uid} className="flex items-center gap-1.5 px-2 py-1 rounded-full" style={{ background: "var(--card)", border: "1px solid var(--court-blue)" }}>
@@ -1731,7 +1745,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
             }
             return (
               <span key={uid} className="rally-chip px-3 py-1 text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
-                {isOrganizer ? (
+                {isOrganizer && !mixedEvent ? (
                   <button type="button" onClick={() => startEditingName(uid, pname)}
                     style={{ width: "auto", color: "inherit", fontWeight: "inherit", fontSize: "inherit" }}>
                     {pname}{organizers.includes(uid) ? " ★" : ""}
@@ -1754,7 +1768,9 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
         </div>
         {isOrganizer ? (
           <div className="text-xs" style={{ color: "var(--slate)" }}>
-            Organizers can tap a name to edit it{iAmParticipant ? ", or the × on your own to stop playing." : "."}
+            {mixedEvent
+              ? "This roster is locked for the optimized mixed draw. Pinder and Neetul receive scoring access through separate organizer invitations, not by changing these player entries."
+              : <>Organizers can tap a name to edit it{iAmParticipant ? ", or the × on your own to stop playing." : "."}</>}
           </div>
         ) : iAmParticipant ? (
           <div className="text-xs" style={{ color: "var(--slate)" }}>
@@ -1787,7 +1803,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
         </div>
       ) : null}
 
-      {isOrganizer && spotsLeft > 0 ? (
+      {isOrganizer && !mixedEvent && spotsLeft > 0 ? (
         <div className="rally-card p-4 mb-5">
           <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Add a player directly</div>
           <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
@@ -1810,7 +1826,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
         </div>
       ) : null}
 
-      {isOrganizer ? (
+      {isOrganizer && !mixedEvent ? (
         <div className="rally-card p-4 mb-5">
           <div className="text-sm font-bold mb-3" style={{ color: "var(--ink)" }}>Invite someone to play</div>
           {error ? (
@@ -2095,7 +2111,167 @@ function EventStandings({ tournament }) {
   );
 }
 
-function EventFull({ event, eventId, isOrganizer }) {
+
+function unorderedPairKey(a, b) {
+  return a < b ? `${a}__${b}` : `${b}__${a}`;
+}
+
+function buildMixedDrawAudit(fullDraw) {
+  if (!fullDraw || !fullDraw.players || !fullDraw.rounds) return null;
+  const players = fullDraw.players;
+  const ids = players.map((p) => p.id);
+  const byId = new Map(players.map((p) => [p.id, p]));
+  const games = Object.fromEntries(ids.map((id) => [id, 0]));
+  const courtCounts = Object.fromEntries(ids.map((id) => [id, { 2: 0, 3: 0, 4: 0 }]));
+  const partnerCounts = new Map();
+  const opponentCounts = new Map();
+
+  const bump = (map, a, b) => {
+    const key = unorderedPairKey(a, b);
+    map.set(key, (map.get(key) || 0) + 1);
+  };
+
+  fullDraw.rounds.forEach((round) => {
+    (round.courts || []).forEach((court) => {
+      const all = [...court.teamA, ...court.teamB];
+      all.forEach((id) => {
+        games[id] = (games[id] || 0) + 1;
+        if (!courtCounts[id]) courtCounts[id] = { 2: 0, 3: 0, 4: 0 };
+        courtCounts[id][court.court] = (courtCounts[id][court.court] || 0) + 1;
+      });
+      bump(partnerCounts, court.teamA[0], court.teamA[1]);
+      bump(partnerCounts, court.teamB[0], court.teamB[1]);
+      court.teamA.forEach((a) => court.teamB.forEach((b) => bump(opponentCounts, a, b)));
+    });
+  });
+
+  let exactMixedPartnerships = 0;
+  let sameGenderPartnerships = 0;
+  let opponentZero = 0;
+  let opponentOnce = 0;
+  let opponentTwice = 0;
+  let opponentThreePlus = 0;
+  let maxOpponentRepeat = 0;
+
+  for (let i = 0; i < ids.length; i += 1) {
+    for (let j = i + 1; j < ids.length; j += 1) {
+      const a = ids[i];
+      const b = ids[j];
+      const key = unorderedPairKey(a, b);
+      const partners = partnerCounts.get(key) || 0;
+      const opponents = opponentCounts.get(key) || 0;
+      const sameGender = byId.get(a)?.gender === byId.get(b)?.gender;
+      if (sameGender) sameGenderPartnerships += partners;
+      if (!sameGender && partners === 1) exactMixedPartnerships += 1;
+      if (opponents === 0) opponentZero += 1;
+      else if (opponents === 1) opponentOnce += 1;
+      else if (opponents === 2) opponentTwice += 1;
+      else opponentThreePlus += 1;
+      maxOpponentRepeat = Math.max(maxOpponentRepeat, opponents);
+    }
+  }
+
+  const rows = players.map((player) => {
+    const others = ids.filter((id) => id !== player.id);
+    const uniquePartners = others.filter((id) => (partnerCounts.get(unorderedPairKey(player.id, id)) || 0) > 0).length;
+    const uniqueOpponents = others.filter((id) => (opponentCounts.get(unorderedPairKey(player.id, id)) || 0) > 0).length;
+    const playerMaxOpponentRepeat = Math.max(0, ...others.map((id) => opponentCounts.get(unorderedPairKey(player.id, id)) || 0));
+    const courts = courtCounts[player.id] || { 2: 0, 3: 0, 4: 0 };
+    return {
+      name: player.name,
+      gender: player.gender,
+      games: games[player.id] || 0,
+      uniquePartners,
+      uniqueOpponents,
+      maxOpponentRepeat: playerMaxOpponentRepeat,
+      court2: courts[2] || 0,
+      court3: courts[3] || 0,
+      court4: courts[4] || 0,
+    };
+  });
+
+  return {
+    rows,
+    allSixGames: rows.every((r) => r.games === 6),
+    partnershipsPerfect: exactMixedPartnerships === 36 && sameGenderPartnerships === 0 && rows.every((r) => r.uniquePartners === 6),
+    exactMixedPartnerships,
+    sameGenderPartnerships,
+    maxOpponentRepeat,
+    opponentZero,
+    opponentOnce,
+    opponentTwice,
+    opponentThreePlus,
+    allThreeCourts: rows.every((r) => r.court2 > 0 && r.court3 > 0 && r.court4 > 0),
+  };
+}
+
+function MixedDrawAudit({ fullDraw }) {
+  const audit = useMemo(() => buildMixedDrawAudit(fullDraw), [fullDraw]);
+  if (!audit) return null;
+  const ok = audit.allSixGames && audit.partnershipsPerfect && audit.maxOpponentRepeat <= 2 && audit.opponentThreePlus === 0 && audit.allThreeCourts;
+  return (
+    <div className="rally-card p-4 mb-5" style={{ borderColor: ok ? "var(--court-blue)" : "var(--danger)" }}>
+      <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizer draw audit · full 6-round schedule</div>
+      <div className="text-xs mb-3" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
+        This section is organizer-only. Players still see rounds one at a time on the live scoring draw.
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.allSixGames ? "var(--ink)" : "var(--danger)" }}>
+          {audit.allSixGames ? "✓" : "✕"} 6 games each
+        </div>
+        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.partnershipsPerfect ? "var(--ink)" : "var(--danger)" }}>
+          {audit.partnershipsPerfect ? "✓" : "✕"} 36/36 mixed partnerships
+        </div>
+        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.sameGenderPartnerships === 0 ? "var(--ink)" : "var(--danger)" }}>
+          {audit.sameGenderPartnerships === 0 ? "✓" : "✕"} 0 same-gender partnerships
+        </div>
+        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.maxOpponentRepeat <= 2 ? "var(--ink)" : "var(--danger)" }}>
+          {audit.maxOpponentRepeat <= 2 ? "✓" : "✕"} max opponent repeat {audit.maxOpponentRepeat}
+        </div>
+        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.opponentThreePlus === 0 ? "var(--ink)" : "var(--danger)" }}>
+          Opponents: {audit.opponentOnce}× once · {audit.opponentTwice}× twice · {audit.opponentZero}× never
+        </div>
+        <div className="rally-chip px-3 py-2 text-xs font-semibold" style={{ color: audit.allThreeCourts ? "var(--ink)" : "var(--danger)" }}>
+          {audit.allThreeCourts ? "✓" : "✕"} everyone uses Courts #2, #3 and #4
+        </div>
+      </div>
+
+      <div className="text-xs font-bold uppercase mb-2" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>Full draw</div>
+      {fullDraw.rounds.map((round, roundIndex) => (
+        <div key={roundIndex} className="mb-3" style={{ borderTop: roundIndex ? "1px solid var(--line)" : "none", paddingTop: roundIndex ? "0.75rem" : 0 }}>
+          <div className="text-sm font-bold mb-1.5" style={{ color: "var(--ink)" }}>Round {roundIndex + 1}</div>
+          {round.courts.map((court) => (
+            <div key={court.court} className="text-xs py-1" style={{ color: "var(--ink)" }}>
+              <strong>Court #{court.court}:</strong> {court.teamA.map((id) => playerName(fullDraw.players, id)).join(" & ")}
+              {" vs "}
+              {court.teamB.map((id) => playerName(fullDraw.players, id)).join(" & ")}
+            </div>
+          ))}
+        </div>
+      ))}
+
+      <div className="text-xs font-bold uppercase mt-4 mb-2" style={{ color: "var(--slate)", letterSpacing: "0.04em" }}>Player-by-player audit</div>
+      <div style={{ overflowX: "auto" }}>
+        <table className="w-full text-xs rally-tabular" style={{ borderCollapse: "collapse", minWidth: "560px" }}>
+          <thead>
+            <tr style={{ color: "var(--slate)" }}>
+              <th className="text-left py-2">Player</th><th className="text-center">G</th><th className="text-center">Partners</th><th className="text-center">Opp.</th><th className="text-center">Max rep.</th><th className="text-center">C2</th><th className="text-center">C3</th><th className="text-center">C4</th>
+            </tr>
+          </thead>
+          <tbody>
+            {audit.rows.map((row) => (
+              <tr key={row.name} style={{ borderTop: "1px solid var(--line)", color: "var(--ink)" }}>
+                <td className="py-2 font-semibold">{row.name}</td><td className="text-center">{row.gender}</td><td className="text-center">{row.uniquePartners}</td><td className="text-center">{row.uniqueOpponents}</td><td className="text-center">{row.maxOpponentRepeat}</td><td className="text-center">{row.court2}</td><td className="text-center">{row.court3}</td><td className="text-center">{row.court4}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EventFull({ event, eventId, isOrganizer, myUid }) {
   const mixedEvent = isMixedAmericanoEvent(event);
   const [tournament, setTournament] = useState(null);
   const [fullDraw, setFullDraw] = useState(null);
@@ -2110,6 +2286,10 @@ function EventFull({ event, eventId, isOrganizer }) {
   const [roundsInput, setRoundsInput] = useState(event.numRounds);
   const [savingRounds, setSavingRounds] = useState(false);
   const [roundsError, setRoundsError] = useState("");
+  const [mixedOrgPhones, setMixedOrgPhones] = useState({ Pinder: "", Neetul: "" });
+  const [mixedOrgBusy, setMixedOrgBusy] = useState("");
+  const [mixedOrgError, setMixedOrgError] = useState("");
+  const [sentMixedOrgInvites, setSentMixedOrgInvites] = useState([]);
 
   useEffect(() => {
     const unsub = watchPadelTournament(eventId, (t) => setTournament(t), () => {});
@@ -2121,12 +2301,43 @@ function EventFull({ event, eventId, isOrganizer }) {
   // regular participant is the expected, correct behavior, not
   // something to surface as a problem.
   useEffect(() => {
-    // Mixed Americano deliberately hides future rounds from everyone,
-    // including organizers, until the current round has all 3 scores.
-    if (!isOrganizer || mixedEvent) { setFullDraw(null); return; }
+    // The full schedule is organizer-only. Players still receive only
+    // the progressively revealed draw document, while organizers can
+    // audit all six rounds immediately after generation.
+    if (!isOrganizer) { setFullDraw(null); return; }
     const unsub = watchPadelFullDraw(eventId, (d) => setFullDraw(d), () => setFullDraw(null));
     return () => unsub();
   }, [eventId, isOrganizer, mixedEvent]);
+
+  useEffect(() => {
+    if (!isOrganizer || !mixedEvent) { setSentMixedOrgInvites([]); return; }
+    const unsub = watchSentOrganizerInvites(eventId, setSentMixedOrgInvites, () => setSentMixedOrgInvites([]));
+    return () => unsub();
+  }, [eventId, isOrganizer, mixedEvent]);
+
+  const inviteMixedScorekeeper = async (personName) => {
+    const raw = mixedOrgPhones[personName] || "";
+    const digits = raw.replace(/[^0-9+]/g, "");
+    if (!digits) { setMixedOrgError(`Enter ${personName}'s phone number.`); return; }
+    setMixedOrgBusy(personName);
+    setMixedOrgError("");
+    try {
+      await sendOrganizerInvite(eventId, digits, personName, myUid);
+      setMixedOrgPhones((prev) => ({ ...prev, [personName]: "" }));
+    } catch (e) {
+      setMixedOrgError(e && e.message ? e.message : `Could not invite ${personName}.`);
+    } finally {
+      setMixedOrgBusy("");
+    }
+  };
+
+  const mixedOrganizerState = (personName) => {
+    const accepted = (event.organizers || []).some((uid) =>
+      normalizedFirstName((event.participantNames || {})[uid]) === normalizedFirstName(personName));
+    if (accepted) return { status: "accepted" };
+    const invite = sentMixedOrgInvites.find((inv) => normalizedFirstName(inv.invitedName) === normalizedFirstName(personName));
+    return invite ? { status: invite.status || "pending", phone: invite.invitedPhone || invite.id || "" } : { status: "none" };
+  };
 
   const anyScoresEntered = tournament && tournament.rounds.some((r) =>
     r.courts.some((c) => c.scoreA != null || c.scoreB != null));
@@ -2233,7 +2444,7 @@ function EventFull({ event, eventId, isOrganizer }) {
         </div>
       ) : null}
 
-      {isOrganizer ? (
+      {isOrganizer && !mixedEvent ? (
         <div className="rally-card p-4 mb-5">
           {regenError ? (
             <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
@@ -2285,6 +2496,46 @@ function EventFull({ event, eventId, isOrganizer }) {
         </div>
       ) : null}
 
+      {isOrganizer && mixedEvent ? (
+        <div className="rally-card p-4 mb-5">
+          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Scorekeeper access</div>
+          <div className="text-xs mb-3" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
+            You already have scoring access as the event creator. Invite Pinder and Neetul using the phone numbers they use to sign in to Court Pop; after OTP sign-in and acceptance, their Firebase UIDs become organizers too.
+          </div>
+          {mixedOrgError ? (
+            <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>{mixedOrgError}</div>
+          ) : null}
+          {["Pinder", "Neetul"].map((personName) => {
+            const state = mixedOrganizerState(personName);
+            return (
+              <div key={personName} className="mb-3" style={{ borderTop: personName === "Neetul" ? "1px solid var(--line)" : "none", paddingTop: personName === "Neetul" ? "0.75rem" : 0 }}>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{personName}</span>
+                  <span className="rally-chip px-3 py-1 text-xs font-semibold" style={{ color: state.status === "accepted" ? "var(--court-blue-highlight)" : "var(--slate)" }}>
+                    {state.status === "accepted" ? "Organizer ✓" : state.status === "pending" ? "Invite pending" : state.status === "declined" ? "Invite declined" : "Not invited"}
+                  </span>
+                </div>
+                {state.status !== "accepted" ? (
+                  <div className="flex gap-2">
+                    <input type="tel" value={mixedOrgPhones[personName] || ""}
+                      onChange={(e) => setMixedOrgPhones((prev) => ({ ...prev, [personName]: e.target.value }))}
+                      placeholder="+91..." className="flex-1 px-3 py-2.5 rounded-lg text-sm"
+                      style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
+                    <button type="button" onClick={() => inviteMixedScorekeeper(personName)} disabled={mixedOrgBusy === personName}
+                      className="rally-btn-primary px-4 text-sm" style={{ width: "auto" }}>
+                      {mixedOrgBusy === personName ? "…" : state.status === "pending" ? "Resend" : "Invite"}
+                    </button>
+                  </div>
+                ) : null}
+                {state.phone && state.status !== "accepted" ? (
+                  <div className="text-xs mt-1" style={{ color: "var(--slate)" }}>Last invite: {state.phone}</div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
       <div className="flex gap-2 mb-5 rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--line)", padding: "0.25rem" }}>
         <button type="button" onClick={() => setActiveTab("play")}
           className={"rally-tab-btn flex-1 py-2 text-sm" + (activeTab === "play" ? " active" : "")}>
@@ -2296,7 +2547,9 @@ function EventFull({ event, eventId, isOrganizer }) {
         </button>
       </div>
 
-      {isOrganizer && fullDraw && fullDraw.rounds.length > tournament.rounds.length ? (
+      {isOrganizer && mixedEvent && fullDraw ? (
+        <MixedDrawAudit fullDraw={fullDraw} />
+      ) : isOrganizer && fullDraw && fullDraw.rounds.length > tournament.rounds.length ? (
         <div className="rally-card p-4 mb-5">
           <button type="button" onClick={() => setShowUpcoming(!showUpcoming)}
             className="text-sm font-bold w-full text-left flex items-center justify-between" style={{ color: "var(--ink)" }}>
@@ -2707,7 +2960,7 @@ function EventsApp() {
 
       {selectedEvent ? (
         selectedEvent.drawGenerated
-          ? <EventFull event={selectedEvent} eventId={selectedEvent.id} isOrganizer={isOrganizer} />
+          ? <EventFull event={selectedEvent} eventId={selectedEvent.id} isOrganizer={isOrganizer} myUid={uid} />
           : <EventNotFull event={selectedEvent} eventId={selectedEvent.id} myUid={uid} myPhone={profile.phone} isOrganizer={isOrganizer}
               onInvited={() => {}} onLeaveAsPlayer={handleLeaveAsPlayer} onRemoveParticipant={handleRemoveParticipant} />
       ) : null}

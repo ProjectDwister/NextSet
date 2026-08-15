@@ -7,7 +7,7 @@ This build adds a fixed **Mixed Americano · 6 female + 6 male** option to `even
 Female: Pinder, Neetul, Arunima, Shweta, Poonam, Sonia  
 Male: Sagar, Gautam, Rohit, Krish, Piyush, Raghav
 
-The Cloud Function normalizes case/whitespace and accepts a longer display name whose first name matches one of the roster names. The event must contain exactly these 12 players before the draw is generated.
+The app now seeds these 12 fixed roster entries automatically as soon as the event is created. The Cloud Function validates the names and genders before generating the draw.
 
 ## Tournament rules implemented
 
@@ -20,15 +20,15 @@ The Cloud Function normalizes case/whitespace and accepts a longer display name 
 - Court labels are the real booked labels: Court #2, Court #3 and Court #4.
 - Court rotation is balanced between 1 and 3 appearances per court; Krish and Shweta are exactly 2/2/2.
 - No opponent pair occurs more than twice in the fixed draw.
-- Only organizers can write scores; Firestore Rules cap this mixed format at 2 organizers.
-- For this event, future rounds are not readable even by organizers. Round N+1 is copied into the live draw only after all three courts in Round N have both scores entered.
+- Only organizers can write scores; this mixed format supports up to 3 organizers: the event creator plus Pinder and Neetul.
+- Organizers can inspect the full six-round schedule in the organizer-only draw audit. Regular players still receive only the progressively revealed live draw. Round N+1 is copied into the live draw only after all three courts in Round N have both scores entered.
 - Scoring is **open-ended**: there is no 24-point target and the two team scores do not need to add to any fixed total. Enter the actual final score from each court.
 - Round N+1 unlocks automatically once **both team scores are entered on all three courts** in Round N.
 - Standings react live as soon as both sides of a match have scores; no Confirm button is required for the mixed format.
 
 ## Organizer setup
 
-Create the event while signed in as **Pinder or Neetul**. After the other person joins, make that person an organizer from the Organizers section. Keep only **Pinder and Neetul** in the organizers list. Firestore score writes are organizer-only.
+Create the event while signed into your own Court Pop account. That account becomes the first organizer/scorekeeper even if you are not playing. Then invite **Pinder** and **Neetul** separately as organizers by phone; when they authenticate with Firebase Phone Auth and accept, their Firebase UIDs are added to the organizers list. Firestore score writes are organizer-only.
 
 ## Deployment
 
@@ -47,9 +47,9 @@ Manual fallback, from the repo root, if the GitHub Action is not configured or f
 1. Open Events → New event.
 2. Choose **Mixed Americano · 6 female + 6 male**.
 3. Date/time/venue are still editable; player count, rounds and court labels are locked to the fixed format.
-4. Add/invite the 12 roster names above.
-5. Make Pinder and Neetul the only organizers.
-6. When the 12th player joins, the Cloud Function generates the exact fixed draw and publishes only Round 1.
+4. Press **Create event**. The app automatically inserts the 12 fixed roster entries; there is no player-add step.
+5. The Cloud Function generates the exact fixed draw automatically. Players receive Round 1 first, while organizers can immediately audit all 6 rounds.
+6. Invite Pinder and Neetul as organizers by phone so they can enter/edit scores from their authenticated accounts.
 
 ## Fixed draw used by the Cloud Function
 
@@ -74,7 +74,7 @@ Manual fallback, from the repo root, if the GitHub Action is not configured or f
 
 ## Scorekeeper authentication
 
-For this fixed mixed event, the account that creates the event is automatically the first organizer/scorekeeper even if that person is not one of the 12 players. The creator should leave the mixed-format "I'll be playing" state as shown by the app; it is locked off automatically when the creator's profile name is not in the fixed roster.
+For this fixed mixed event, the account that creates the event is automatically the first organizer/scorekeeper even if that person is not one of the 12 players. The creator is kept outside the 12-player roster automatically. The fixed roster is represented by dedicated roster ids, so the creator cannot accidentally become a 13th player even if the creator's profile name matches one of the players.
 
 Pinder and Neetul receive separate organizer invitations using the phone numbers tied to their Court Pop/Firebase Auth accounts. Each must sign in with that same verified phone number and accept the organizer invitation. Acceptance adds that account's Firebase UID to the event's `organizers` array. Score writes are authorized against those organizer UIDs, not against display-name text.
 

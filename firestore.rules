@@ -418,18 +418,15 @@ service cloud.firestore {
       // The complete schedule, written once by the Cloud Function at
       // generation time and never touched by any client directly —
       // scores are only ever entered against draw above, never here.
-      // Organizer-only read, which is what actually makes "only I can
-      // see all 11 rounds upfront" true: nobody else's client can read
-      // this document at all, regardless of what the UI does or
-      // doesn't show them.
+      // Organizer-only read: regular players cannot inspect unrevealed
+      // rounds, while organizers can audit the complete generated schedule.
       match /tournament/fullDraw {
-        // Standard Americano organizers may still peek ahead. For the
-        // fixed mixed event, nobody can read future rounds directly;
-        // the Cloud Function (Admin SDK) can still read/write this doc
-        // because Admin SDK bypasses Firestore Security Rules.
-        allow read: if isSignedIn()
-          && isPadelEventOrganizer(eventId)
-          && get(/databases/$(database)/documents/padelEvents/$(eventId)).data.tournamentFormat != 'mixed-americano-6x6';
+        // The complete schedule is organizer-only. This now includes
+        // the fixed mixed event so its organizers can audit all six
+        // rounds immediately; regular players still cannot read this
+        // document and continue to receive only the progressively
+        // revealed tournament/draw document.
+        allow read: if isSignedIn() && isPadelEventOrganizer(eventId);
         allow delete: if isSignedIn()
           && request.auth.uid == get(/databases/$(database)/documents/padelEvents/$(eventId)).data.createdBy;
         allow create, update: if false;

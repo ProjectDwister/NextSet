@@ -18,6 +18,24 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js';
 
 const PADEL_EVENTS = 'padelEvents';
+const MIXED_AMERICANO_FORMAT = 'mixed-americano-6x6';
+const MIXED_AMERICANO_FEMALES = ['Pinder', 'Neetul', 'Arunima', 'Shweta', 'Poonam', 'Sonia'];
+const MIXED_AMERICANO_MALES = ['Sagar', 'Gautam', 'Rohit', 'Krish', 'Piyush', 'Raghav'];
+
+function fixedMixedRosterId(name, gender) {
+  return `mixed_${gender.toLowerCase()}_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+}
+
+function buildFixedMixedRoster() {
+  const entries = [
+    ...MIXED_AMERICANO_FEMALES.map((name) => ({ id: fixedMixedRosterId(name, 'F'), name })),
+    ...MIXED_AMERICANO_MALES.map((name) => ({ id: fixedMixedRosterId(name, 'M'), name })),
+  ];
+  return {
+    participants: entries.map((entry) => entry.id),
+    participantNames: Object.fromEntries(entries.map((entry) => [entry.id, entry.name])),
+  };
+}
 
 export function toTimestamp(dateStr, timeStr) {
   return Timestamp.fromDate(new Date(`${dateStr}T${timeStr}`));
@@ -29,6 +47,7 @@ export async function getPadelEvent(eventId) {
 }
 
 export async function createPadelEvent(fields, myUid, myName, iAmPlaying = true) {
+  const isFixedMixed = fields.tournamentFormat === MIXED_AMERICANO_FORMAT;
   const ref = await addDoc(collection(db, PADEL_EVENTS), {
     createdBy: myUid,
     dateTime: fields.dateTime,
@@ -40,14 +59,55 @@ export async function createPadelEvent(fields, myUid, myName, iAmPlaying = true)
     numRounds: fields.numRounds,
     pointsTarget: fields.pointsTarget,
     notes: fields.notes || '',
-    participants: iAmPlaying ? [myUid] : [],
+    // The fixed 6F+6M roster is seeded immediately after creation with
+    // synthetic player ids. The creator stays an organizer/scorekeeper
+    // and is never accidentally counted as a 13th player.
+    participants: isFixedMixed ? [] : (iAmPlaying ? [myUid] : []),
     participantNames: { [myUid]: myName },
     organizers: [myUid],
     drawGenerated: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  if (isFixedMixed) {
+    try {
+      await ensureFixedMixedRoster(ref.id, myUid, myName);
+    } catch (error) {
+      // Avoid leaving behind a half-created mixed event that would ask
+      // the organizer to add the fixed roster manually.
+      await deleteDoc(ref).catch(() => {});
+      throw error;
+    }
+  }
+
   return ref.id;
+}
+
+// Seeds (or repairs) the fixed mixed roster in one organizer-authorized
+// update. This is also called by the Events page when an older test
+// event created before automatic seeding is opened, so those events do
+// not need to be deleted and recreated just to pick up the fixed roster.
+export async function ensureFixedMixedRoster(eventId, myUid, myName) {
+  const ref = doc(db, PADEL_EVENTS, eventId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('This event no longer exists.');
+  const data = snap.data();
+  if (data.tournamentFormat !== MIXED_AMERICANO_FORMAT) return false;
+
+  const roster = buildFixedMixedRoster();
+  const currentIds = data.participants || [];
+  const currentNames = data.participantNames || {};
+  const alreadySeeded = roster.participants.length === currentIds.length
+    && roster.participants.every((id) => currentIds.includes(id) && currentNames[id] === roster.participantNames[id]);
+  if (alreadySeeded) return false;
+
+  await updateDoc(ref, {
+    participants: roster.participants,
+    participantNames: { ...currentNames, [myUid]: myName || currentNames[myUid] || '', ...roster.participantNames },
+    updatedAt: serverTimestamp(),
+  });
+  return true;
 }
 
 export async function updatePadelEvent(eventId, fields) {
