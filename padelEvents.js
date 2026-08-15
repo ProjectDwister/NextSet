@@ -75,6 +75,7 @@ export async function deletePadelEvent(eventId) {
     ...padelInvites.docs.map((d) => deleteDoc(d.ref)),
     ...organizerInvites.docs.map((d) => deleteDoc(d.ref)),
     deleteDoc(doc(db, PADEL_EVENTS, eventId, 'tournament', 'draw')).catch(() => {}), // fine if it never existed
+    deleteDoc(doc(db, PADEL_EVENTS, eventId, 'tournament', 'fullDraw')).catch(() => {}),
   ];
   await Promise.all(deletions);
   await deleteDoc(doc(db, PADEL_EVENTS, eventId));

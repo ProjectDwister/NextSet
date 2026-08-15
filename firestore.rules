@@ -1,0 +1,466 @@
+rules_version = '2';
+
+// See DATA_MODEL.md for the full schema and the reasoning behind these
+// rules. Before deploying: paste this into Firebase console > Firestore
+// Database > Rules > Rules Playground (or the emulator) and run through
+// the test cases listed at the bottom of DATA_MODEL.md. Rules are the
+// one part of this app where a subtle mistake means real data leaks, so
+// don't skip that step just because it compiles.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Firebase populates this claim automatically for phone-auth users.
+    function myPhone() {
+      return request.auth.token.phone_number;
+    }
+
+    function onlyChanged(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // Invite doc ids are always "{eventId}_{invitedPhone}". That turns
+    // "do I have an invite to this event" into a cheap, safe get() by a
+    // known path instead of an open-ended query — see DATA_MODEL.md.
+    function inviteId(eventId, phone) {
+      return eventId + '_' + phone;
+    }
+
+    function invitePath(eventId, phone) {
+      return /databases/$(database)/documents/invites/$(inviteId(eventId, phone));
+    }
+
+    function hasAnyInvite(eventId) {
+      return exists(invitePath(eventId, myPhone()));
+    }
+
+    function hasAcceptedInvite(eventId) {
+      return hasAnyInvite(eventId) && get(invitePath(eventId, myPhone())).data.status == 'accepted';
+    }
+
+    // ---------- users ----------
+    // One doc per registered player, keyed by their Firebase Auth uid.
+    // Deliberately self-read-only: display names inside events come from
+    // the event's own participantNames map (see below), so nothing here
+    // ever needs to be readable by anyone but its owner. That keeps the
+    // whole users collection from being a directory someone could scrape
+    // for phone numbers.
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.phone == myPhone()
+        && request.resource.data.keys().hasOnly(['phone', 'name', 'createdAt']);
+
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && onlyChanged(['name']);
+
+      allow delete: if false;
+
+      // One doc per subscribed device/browser, keyed by a hash of its
+      // push endpoint (computed client-side) so re-subscribing the same
+      // device overwrites cleanly instead of piling up duplicates. Only
+      // ever read or written by its own owner — the Cloud Function that
+      // actually sends reminders uses the Admin SDK, which bypasses
+      // these rules entirely, so it doesn't need any access granted here.
+      match /pushSubscriptions/{subId} {
+        allow read, write: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // ---------- events ----------
+    // Readable only by a confirmed participant, or by someone who
+    // currently holds ANY invite (pending or accepted) to this event —
+    // that second clause is what lets an invitee preview an event's
+    // details before deciding whether to accept. Nobody else can read
+    // it, even if they know the document id.
+    //
+    // The organizer (createdBy) is always included in participants at
+    // creation time, so a separate createdBy check isn't needed for
+    // read access — only for write access, below.
+
+    match /events/{eventId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.participants
+        || hasAnyInvite(eventId)
+      );
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.participants == [request.auth.uid]
+        && request.resource.data.keys().hasOnly([
+             'createdBy', 'dateTime', 'durationMin', 'location', 'court',
+             'format', 'notes', 'participants', 'participantNames',
+             'createdAt', 'updatedAt'
+           ]);
+
+      allow update: if isSignedIn() && (
+        // the organizer can change anything except who created it
+        (
+          request.auth.uid == resource.data.createdBy
+          && request.resource.data.createdBy == resource.data.createdBy
+        )
+        ||
+        // someone holding an ACCEPTED invite may add exactly themself
+        (
+          hasAcceptedInvite(eventId)
+          && onlyChanged(['participants', 'participantNames', 'updatedAt'])
+          && request.resource.data.participants == resource.data.participants.concat([request.auth.uid])
+        )
+      );
+
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.createdBy;
+    }
+
+    // ---------- invites ----------
+    // Doc id is always "{eventId}_{invitedPhone}" (see inviteId() above).
+    // Readable by the invitee (matched on their verified phone claim,
+    // so this works even before they've registered) or the inviter.
+    //
+    // No separate `list` rule is defined on purpose — Firestore only
+    // allows a list/query request when it can prove every possible
+    // result satisfies `allow read`. As long as the client always
+    // queries with a matching where() filter (invitedPhone == my phone,
+    // or invitedBy == my uid), that's provable and the query is allowed.
+    // An unfiltered "list all invites" query will be rejected. Do not
+    // add a broader `allow list` here to "make a query work" — that's
+    // almost always a sign the client should be filtering instead.
+
+    match /invites/{docId} {
+      allow read: if isSignedIn() && (
+        resource.data.invitedPhone == myPhone()
+        || resource.data.invitedBy == request.auth.uid
+      );
+
+      allow create: if isSignedIn()
+        && docId == inviteId(request.resource.data.eventId, request.resource.data.invitedPhone)
+        && request.resource.data.invitedBy == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.auth.uid in get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.participants
+        && request.resource.data.keys().hasOnly([
+             'eventId', 'invitedBy', 'invitedPhone', 'invitedName',
+             'status', 'createdAt', 'respondedAt'
+           ]);
+
+      // Only the invitee can respond, only while still pending, and only
+      // the status/respondedAt fields may change — they can't rewrite
+      // who invited them or which event it points to.
+      allow update: if isSignedIn()
+        && resource.data.invitedPhone == myPhone()
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted', 'declined']
+        && onlyChanged(['status', 'respondedAt']);
+
+      allow delete: if isSignedIn()
+        && resource.data.invitedBy == request.auth.uid
+        && resource.data.status == 'pending';
+    }
+
+    // ---------- tournaments (Rally) ----------
+    // Deliberately open to any signed-in NextSet user, not scoped to
+    // specific participants the way events/invites are above — this
+    // matches what Rally was always designed for (share a link, anyone
+    // at the courts can jump in and update scores live), just now
+    // requiring that "anyone" to be a verified NextSet account instead
+    // of a total stranger with the link. Tournament ids are unguessable
+    // Firestore auto-ids, which is the actual access boundary here in
+    // practice, the same way it always was — the change is who's
+    // allowed to hold that id at all, not how tightly each tournament
+    // itself is locked down.
+    match /tournaments/{tournamentId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ---------- admins ----------
+    // Existence of a doc here, keyed by phone number, marks someone
+    // with read-only visibility into every padelEvent regardless of
+    // participation — for the app's own owner to see what's going on,
+    // not to act on anyone's behalf. Managed by hand in the Firebase
+    // console only; no client code ever reads, writes, or even checks
+    // this collection directly, it's purely an internal signal other
+    // rules consult via exists(). Deliberately keyed by phone rather
+    // than uid so it never needs a value pasted into this file itself
+    // — this file lives in a public repo, a phone number doesn't
+    // belong in it, a Firestore document with locked-down rules does.
+    match /admins/{phone} {
+      allow read, write: if false;
+    }
+
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/admins/$(myPhone()));
+    }
+
+    // ---------- padelEvents ----------
+    // Capacity-gated tournament events ("12 players, 3 courts,
+    // Americano") — invited and joined exactly like events/ above.
+    // Once every invite is accepted, a Cloud Function generates the
+    // actual draw and writes it to the nested tournament/ subcollection
+    // below — nested specifically so its access rules can just say
+    // "same people who can see the event," rather than duplicating the
+    // participant-check logic a third time. This is deliberately NOT
+    // the same as Rally's standalone tournaments/ above, which stays
+    // open to any signed-in user by design; these are private to their
+    // 12 (or however many) participants, same as events/.
+    //
+    // `organizers` is deliberately separate from `participants`: an
+    // organizer can invite, edit, and manage scoring without being one
+    // of the people actually playing, and the role is reassignable —
+    // neither of those is true of `createdBy`, which stays fixed as a
+    // historical record of who originally created the event.
+
+    function isPadelEventParticipant(eventId) {
+      return request.auth.uid in
+        get(/databases/$(database)/documents/padelEvents/$(eventId)).data.participants;
+    }
+
+    function isPadelEventOrganizer(eventId) {
+      return request.auth.uid in
+        get(/databases/$(database)/documents/padelEvents/$(eventId)).data.organizers;
+    }
+
+    function padelInvitePath(eventId, phone) {
+      return /databases/$(database)/documents/padelEvents/$(eventId)/padelInvites/$(phone);
+    }
+
+    function hasAnyPadelEventInvite(eventId) {
+      return exists(padelInvitePath(eventId, myPhone()));
+    }
+
+    function hasAcceptedPadelEventInvite(eventId) {
+      return hasAnyPadelEventInvite(eventId)
+        && get(padelInvitePath(eventId, myPhone())).data.status == 'accepted';
+    }
+
+    function organizerInvitePath(eventId, phone) {
+      return /databases/$(database)/documents/padelEvents/$(eventId)/organizerInvites/$(phone);
+    }
+
+    function hasAcceptedOrganizerInvite(eventId) {
+      return exists(organizerInvitePath(eventId, myPhone()))
+        && get(organizerInvitePath(eventId, myPhone())).data.status == 'accepted';
+    }
+
+    // Read is open to any signed-in Court Pop user, not just this
+    // event's own participants/organizers/invitees — a deliberate
+    // widening, not an oversight. Worth being explicit about why: a
+    // guest player (added directly, no account of their own) can
+    // never satisfy participant/organizer checks no matter what those
+    // checks say, since there's no real, authenticated identity behind
+    // a synthetic guest id for any rule to match against. Restricting
+    // read to "this event's own people" would only ever have worked
+    // for people with real accounts tied to this specific event —
+    // opening it to any signed-in user is what actually makes it
+    // possible for someone to view a draw, even if the specific path
+    // to get there (them creating an account and being told the event
+    // exists) isn't automatic. The real, sharper fix for guest
+    // visibility specifically — a link viewable with no account at
+    // all — is a separate, larger feature, not attempted here.
+    match /padelEvents/{eventId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && (request.resource.data.participants == [request.auth.uid] || request.resource.data.participants == [])
+        && request.resource.data.organizers == [request.auth.uid]
+        && request.resource.data.keys().hasOnly([
+             'createdBy', 'dateTime', 'durationMin', 'location', 'courts',
+             'capacity', 'tournamentFormat', 'numRounds', 'pointsTarget',
+             'notes', 'participants', 'participantNames', 'organizers',
+             'drawGenerated', 'createdAt', 'updatedAt'
+           ]);
+
+      // An organizer can change anything, including reassigning who
+      // the organizer(s) are — that's the actual mechanism for "make
+      // someone else the organizer," not a separate admin override.
+      // Capped at 4 regardless of which branch touches the field, an
+      // organizer doesn't have to be one of the players, and someone
+      // playing isn't automatically an organizer just for being one of
+      // the 12. Accepting a player invite only ever grants adding
+      // yourself to participants; accepting an organizer invite is the
+      // mirror of that for organizers — two structurally identical but
+      // separate branches, since the two invite types are deliberately
+      // separate collections throughout.
+      //
+      // createdBy must always remain in organizers, regardless of
+      // which branch below is doing the updating — the one thing no
+      // organizer, including one accepting a fresh invite, can ever do
+      // is remove the event's original creator from the organizer
+      // list. That's the actual mechanism behind "nobody can remove me
+      // as organizer": not a special case elsewhere, just this one
+      // constraint applied uniformly.
+      allow update: if isSignedIn()
+        && (
+          (resource.data.tournamentFormat == 'mixed-americano-6x6'
+            && request.resource.data.organizers.size() <= 2)
+          ||
+          (resource.data.tournamentFormat != 'mixed-americano-6x6'
+            && request.resource.data.organizers.size() <= 4)
+        )
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdBy in request.resource.data.organizers
+        && (
+          isPadelEventOrganizer(eventId)
+          ||
+          (
+            hasAcceptedPadelEventInvite(eventId)
+            && onlyChanged(['participants', 'participantNames', 'updatedAt'])
+            && request.resource.data.participants == resource.data.participants.concat([request.auth.uid])
+          )
+          ||
+          (
+            hasAcceptedOrganizerInvite(eventId)
+            && onlyChanged(['organizers', 'participantNames', 'updatedAt'])
+            && request.resource.data.organizers == resource.data.organizers.concat([request.auth.uid])
+          )
+        );
+
+      // Only the event's original creator can actually delete it —
+      // every other organizer can request deletion (a normal update,
+      // setting deleteRequestedBy, already covered by the update rule
+      // above), but the request itself does nothing until the creator
+      // approves it by calling delete themself. Deliberately not
+      // "any organizer," specifically to prevent exactly the
+      // accidental-deletion scenario this was asked for.
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.createdBy;
+
+      match /padelInvites/{invitedPhone} {
+        allow read: if isSignedIn() && (
+          myPhone() == invitedPhone
+          || isPadelEventParticipant(eventId)
+          || isPadelEventOrganizer(eventId)
+          || isAdmin()
+        );
+
+        allow create: if isSignedIn() && isPadelEventOrganizer(eventId);
+
+        allow update: if isSignedIn()
+          && myPhone() == invitedPhone
+          && onlyChanged(['status', 'respondedAt'])
+          && request.resource.data.status in ['accepted', 'declined'];
+
+        allow delete: if isSignedIn() && isPadelEventOrganizer(eventId);
+      }
+
+      // Deliberately a SEPARATE subcollection from padelInvites, not a
+      // role field on the same one — that keeps a person able to be
+      // pending as an invited player and an invited organizer at the
+      // same time (two different documents, two different ids),
+      // rather than colliding on one document keyed by phone number.
+      // Only existing organizers can send these, unlike player
+      // invites which any participant can send — granting someone the
+      // ability to edit, invite, and manage scoring is a meaningfully
+      // bigger grant than inviting them to play.
+      match /organizerInvites/{invitedPhone} {
+        allow read: if isSignedIn() && (
+          myPhone() == invitedPhone
+          || isPadelEventParticipant(eventId)
+          || isPadelEventOrganizer(eventId)
+          || isAdmin()
+        );
+
+        allow create: if isSignedIn() && isPadelEventOrganizer(eventId);
+
+        allow update: if isSignedIn()
+          && myPhone() == invitedPhone
+          && onlyChanged(['status', 'respondedAt'])
+          && request.resource.data.status in ['accepted', 'declined'];
+
+        allow delete: if isSignedIn() && isPadelEventOrganizer(eventId);
+      }
+
+      // Written by the Cloud Function (Admin SDK, bypasses these
+      // rules) when the event fills up. Regular Americano keeps the
+      // existing participant score-entry permission; the fixed mixed
+      // format is organizer-only. Read access stays open to any signed-in
+      // Court Pop user so the live draw and leaderboard remain viewable.
+      //
+      // draw only ever contains whatever rounds have been revealed so
+      // far — starts at round 1, grows one round at a time as each
+      // round finishes (see revealNextRoundOnComplete in the Cloud
+      // Function). This is the genuinely enforced half of "only the
+      // organizer sees every round upfront" — not a UI choice, a
+      // reader here structurally cannot receive rounds that haven't
+      // been revealed yet, because they were never written to this
+      // document in the first place. Read access itself is
+      // deliberately open to any signed-in user, same reasoning as
+      // padelEvents above — draws, scores, and the leaderboard are
+      // meant to be viewable by anyone, playing in this event or not.
+      match /tournament/draw {
+        allow read: if isSignedIn();
+
+        // Keep the existing participant-scoring behaviour for regular
+        // Americano events, but make the fixed 6F+6M event organizer-only.
+        // Participants on regular events may change score/round data only;
+        // organizers retain the broader management permission.
+        allow update: if isSignedIn() && (
+          isPadelEventOrganizer(eventId)
+          ||
+          (
+            get(/databases/$(database)/documents/padelEvents/$(eventId)).data.tournamentFormat != 'mixed-americano-6x6'
+            && isPadelEventParticipant(eventId)
+            && onlyChanged(['rounds', 'updatedAt'])
+          )
+        );
+
+        allow create, delete: if isSignedIn() && isPadelEventOrganizer(eventId);
+      }
+
+      // The complete schedule, written once by the Cloud Function at
+      // generation time and never touched by any client directly —
+      // scores are only ever entered against draw above, never here.
+      // Organizer-only read, which is what actually makes "only I can
+      // see all 11 rounds upfront" true: nobody else's client can read
+      // this document at all, regardless of what the UI does or
+      // doesn't show them.
+      match /tournament/fullDraw {
+        // Standard Americano organizers may still peek ahead. For the
+        // fixed mixed event, nobody can read future rounds directly;
+        // the Cloud Function (Admin SDK) can still read/write this doc
+        // because Admin SDK bypasses Firestore Security Rules.
+        allow read: if isSignedIn()
+          && isPadelEventOrganizer(eventId)
+          && get(/databases/$(database)/documents/padelEvents/$(eventId)).data.tournamentFormat != 'mixed-americano-6x6';
+        allow delete: if isSignedIn()
+          && request.auth.uid == get(/databases/$(database)/documents/padelEvents/$(eventId)).data.createdBy;
+        allow create, update: if false;
+      }
+    }
+
+    // Collection-group rule, needed so a signed-in user can query
+    // "every event that has invited me" without already knowing which
+    // event ids to look under in the first place — regular path-scoped
+    // rules (like the padelInvites one above) don't cover collection
+    // group queries at all, they need this separate declaration. Given
+    // its own distinct subcollection name specifically so this can
+    // never overlap with the unrelated top-level invites/ collection
+    // above: a collection-group rule applies to every collection with
+    // a matching name anywhere in the database, and "invites" already
+    // means something else entirely up there, with its own rules.
+    //
+    // Checks resource.data.invitedPhone here, not the {invitedPhone}
+    // path wildcard, even though both always hold the same value in
+    // practice (this app always sets them identically). The actual
+    // client query filters with where('invitedPhone', '==', ...) — a
+    // data-field comparison — and for a list/query (as opposed to a
+    // single-document get), Firestore needs the rule to be provably
+    // satisfied purely from the query's own filters. A rule based on
+    // the path segment doesn't structurally match a query filtering on
+    // a data field, even when the values agree, and gets rejected
+    // outright rather than evaluated per-document.
+    match /{path=**}/padelInvites/{invitedPhone} {
+      allow read: if isSignedIn() && resource.data.invitedPhone == myPhone();
+    }
+    match /{path=**}/organizerInvites/{invitedPhone} {
+      allow read: if isSignedIn() && resource.data.invitedPhone == myPhone();
+    }
+  }
+}

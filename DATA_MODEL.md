@@ -128,7 +128,7 @@ private, participant-only version of a Rally tournament.
 | `location`          | string          |                                      |
 | `courts`            | string          | e.g. "Courts 4-6", free text like `court` on events |
 | `capacity`          | number          | total players needed, e.g. 12 (must be a multiple of 4) |
-| `tournamentFormat`  | string          | `'americano'` — the only one wired up so far; see below |
+| `tournamentFormat`  | string          | `'americano'` or `'mixed-americano-6x6'` for the fixed 12-player mixed event |
 | `numRounds`         | number          |                                      |
 | `pointsTarget`      | number          |                                      |
 | `notes`             | string, optional |                                     |
@@ -164,21 +164,14 @@ managing it.
 
 The actual Americano draw, written once by the `generateDrawOnFull`
 Cloud Function the moment `participants.length` reaches `capacity` —
-never by a client directly, though clients (any participant) can
-read and write it afterward to enter scores, same trust level Rally's
-own `tournaments` collection uses. Same shape as a Rally tournament
-document (`players`, `rounds`, `numCourts`, `pointsTarget`), deliberately
-kept structurally identical so the same client-side scoring/standings
-logic can be reused rather than reimplemented.
+never by a client directly. Any signed-in user may read the live draw, while score writes are restricted to the event's organizers. The document keeps the same shape as a Rally tournament (`players`, `rounds`, `numCourts`, `pointsTarget`) so the same client-side scoring/standings logic can be reused rather than reimplemented.
 
 The pairing algorithm itself is ported into the Cloud Function
 byte-for-byte from Rally's own `generateFullAmericanoSchedule` and its
 helpers (`functions/index.js`) — not reimplemented from scratch, to
 avoid two versions of the same algorithm quietly drifting apart over
 time. If Rally's version ever changes, this needs updating to match.
-Currently Americano-only, non-mixed-mode only (padelEvents participants
-don't carry a gender field the way Rally's manually-entered roster
-does) — Mexicano support would reuse this exact same structure.
+Standard events use the regular Americano generator. The `mixed-americano-6x6` template is a fixed 12-player mixed event for Pinder, Neetul, Arunima, Shweta, Poonam, Sonia, Sagar, Gautam, Rohit, Krish, Piyush and Raghav. Its Cloud Function maps the roster by normalized display name, writes Court #2/#3/#4 directly, and reveals subsequent rounds only after all three courts in the current round have scores.
 
 ## Why `users` is locked down
 

@@ -878,6 +878,28 @@ function suggestedRounds(numPlayers) {
   return 7;
 }
 
+const MIXED_AMERICANO_FORMAT = "mixed-americano-6x6";
+const MIXED_AMERICANO_FEMALES = ["Pinder", "Neetul", "Arunima", "Shweta", "Poonam", "Sonia"];
+const MIXED_AMERICANO_MALES = ["Sagar", "Gautam", "Rohit", "Krish", "Piyush", "Raghav"];
+
+function isMixedAmericanoEvent(event) {
+  return event && event.tournamentFormat === MIXED_AMERICANO_FORMAT;
+}
+
+function normalizedFirstName(name) {
+  return (name || "")
+    .normalize("NFKD")
+    .replace(/[\u200B-\u200D\uFEFF\u2060]/g, "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)[0];
+}
+
+function isMixedScorekeeperName(name) {
+  const key = normalizedFirstName(name);
+  return key === "pinder" || key === "neetul";
+}
+
 function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, error, theme, onThemeChange, onSignOut, onClose }) {
   return (
     <div
@@ -1012,7 +1034,7 @@ function MenuModal({ profile, nameValue, onNameChange, onSaveName, savingName, e
   );
 }
 
-function CreateEventForm({ onCreate, creating, error }) {
+function CreateEventForm({ onCreate, creating, error, creatorName }) {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [durationMin, setDurationMin] = useState(120);
@@ -1020,27 +1042,44 @@ function CreateEventForm({ onCreate, creating, error }) {
   const [courts, setCourts] = useState("");
   const [capacity, setCapacity] = useState(12);
   const [notes, setNotes] = useState("");
+  const [tournamentFormat, setTournamentFormat] = useState("americano");
   const [iAmPlaying, setIAmPlaying] = useState(true);
   const [localError, setLocalError] = useState("");
   const [numRounds, setNumRounds] = useState(suggestedRounds(12));
   const [roundsManuallySet, setRoundsManuallySet] = useState(false);
 
+  const mixedFormat = tournamentFormat === MIXED_AMERICANO_FORMAT;
   const numCourts = Math.max(1, Math.floor(Number(capacity) / 4));
   const capacityValid = Number(capacity) >= 4 && Number(capacity) % 4 === 0;
-  const perfectRounds = Math.max(1, Number(capacity) - 1);
+  const perfectRounds = mixedFormat ? 6 : Math.max(1, Number(capacity) - 1);
+
+  useEffect(() => {
+    if (mixedFormat) {
+      setCapacity(12);
+      setNumRounds(6);
+      setRoundsManuallySet(true);
+      setCourts("Court #2, Court #3, Court #4");
+      setIAmPlaying(true);
+    } else {
+      setRoundsManuallySet(false);
+      setNumRounds(suggestedRounds(Number(capacity) || 12));
+      if (courts === "Court #2, Court #3, Court #4") setCourts("");
+    }
+  }, [mixedFormat]);
 
   // Follows the suggested default as capacity changes, right up until
   // the person actually edits the rounds field themself — after that,
   // their choice sticks regardless of further capacity edits.
   useEffect(() => {
-    if (!roundsManuallySet) {
+    if (!mixedFormat && !roundsManuallySet) {
       setNumRounds(suggestedRounds(Number(capacity) || 4));
     }
-  }, [capacity]);
+  }, [capacity, mixedFormat]);
 
   const handleSubmit = () => {
     if (!date || !startTime) return setLocalError("Pick a date and start time.");
     if (!location.trim()) return setLocalError("Add a venue.");
+    if (mixedFormat && !isMixedScorekeeperName(creatorName)) return setLocalError("Create this mixed event while signed in as Pinder or Neetul, so the scorekeeper permissions start correctly.");
     if (!capacityValid) return setLocalError("Total players must be a multiple of 4 (so every court stays full).");
     if (!Number(numRounds) || Number(numRounds) < 1) return setLocalError("Enter at least 1 round.");
     setLocalError("");
@@ -1050,6 +1089,7 @@ function CreateEventForm({ onCreate, creating, error }) {
       location: location.trim(),
       courts: courts.trim() || `${numCourts} court${numCourts === 1 ? "" : "s"}`,
       capacity: Number(capacity),
+      tournamentFormat,
       numRounds: Number(numRounds),
       pointsTarget: 24,
       notes: notes.trim(),
@@ -1070,6 +1110,24 @@ function CreateEventForm({ onCreate, creating, error }) {
           {localError || error}
         </div>
       ) : null}
+
+      <div className="rally-card p-4 mb-4">
+        <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Event format</label>
+        <select value={tournamentFormat} onChange={(e) => setTournamentFormat(e.target.value)}
+          className="w-full px-3 py-2.5 rounded-lg text-sm"
+          style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }}>
+          <option value="americano">Americano</option>
+          <option value={MIXED_AMERICANO_FORMAT}>Mixed Americano · 6 female + 6 male</option>
+        </select>
+        {mixedFormat ? (
+          <div className="mt-3 text-xs" style={{ color: "var(--slate)", lineHeight: 1.6 }}>
+            <div><strong style={{ color: "var(--ink)" }}>Fixed setup:</strong> 12 players · 6 rounds · Court #2, Court #3 and Court #4.</div>
+            <div className="mt-2"><strong style={{ color: "var(--ink)" }}>Female:</strong> {MIXED_AMERICANO_FEMALES.join(", ")}</div>
+            <div><strong style={{ color: "var(--ink)" }}>Male:</strong> {MIXED_AMERICANO_MALES.join(", ")}</div>
+            <div className="mt-2">Use these player names when inviting/adding the roster. The draw is generated only when all 12 names are present.</div>
+          </div>
+        ) : null}
+      </div>
 
       <div className="rally-card p-4 mb-4">
         <div className="grid grid-cols-2 gap-3 mb-3">
@@ -1100,7 +1158,7 @@ function CreateEventForm({ onCreate, creating, error }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Total players</label>
-            <input type="number" min="4" step="4" value={capacity} onChange={(e) => setCapacity(e.target.value)}
+            <input type="number" min="4" step="4" value={capacity} disabled={mixedFormat} onChange={(e) => setCapacity(e.target.value)}
               className="w-full px-3 py-2.5 rounded-lg text-sm rally-tabular"
               style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
             <div className="text-xs mt-0.5" style={{ color: "var(--slate)" }}>
@@ -1109,7 +1167,7 @@ function CreateEventForm({ onCreate, creating, error }) {
           </div>
           <div>
             <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Courts (optional label)</label>
-            <input type="text" value={courts} onChange={(e) => setCourts(e.target.value)} placeholder="e.g. Courts 1-3"
+            <input type="text" value={courts} disabled={mixedFormat} onChange={(e) => setCourts(e.target.value)} placeholder="e.g. Courts 1-3"
               className="w-full px-3 py-2.5 rounded-lg text-sm"
               style={{ border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
           </div>
@@ -1119,11 +1177,11 @@ function CreateEventForm({ onCreate, creating, error }) {
       <div className="rally-card p-4 mb-5">
         <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--slate)" }}>Rounds</label>
         <div className="flex gap-2 items-start">
-          <input type="number" min="1" step="1" value={numRounds}
+          <input type="number" min="1" step="1" value={numRounds} disabled={mixedFormat}
             onChange={(e) => { setRoundsManuallySet(true); setNumRounds(e.target.value); }}
             className="px-3 py-2.5 rounded-lg text-sm rally-tabular"
             style={{ width: "96px", border: "1px solid var(--line)", background: "var(--chalk)", color: "var(--ink)" }} />
-          {capacityValid && Number(numRounds) !== perfectRounds ? (
+          {!mixedFormat && capacityValid && Number(numRounds) !== perfectRounds ? (
             <button type="button"
               onClick={() => { setRoundsManuallySet(true); setNumRounds(perfectRounds); }}
               className="text-xs font-semibold px-3 py-2.5 rounded-lg"
@@ -1133,9 +1191,11 @@ function CreateEventForm({ onCreate, creating, error }) {
           ) : null}
         </div>
         <div className="text-xs" style={{ color: "var(--slate)", marginTop: "6px" }}>
-          {capacityValid
-            ? `${perfectRounds} rounds means every player partners with every other player exactly once. Fewer rounds means a shorter event, but some partnerships won't happen.`
-            : "Set total players first to see the full-coverage round count."}
+          {mixedFormat
+            ? "6 rounds means each male partners every female exactly once, with no same-gender partnerships."
+            : capacityValid
+              ? `${perfectRounds} rounds means every player partners with every other player exactly once. Fewer rounds means a shorter event, but some partnerships won't happen.`
+              : "Set total players first to see the full-coverage round count."}
         </div>
       </div>
 
@@ -1148,12 +1208,14 @@ function CreateEventForm({ onCreate, creating, error }) {
 
       <div className="rally-card p-4 mb-5">
         <label className="flex items-start gap-3" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={iAmPlaying} onChange={(e) => setIAmPlaying(e.target.checked)}
+          <input type="checkbox" checked={iAmPlaying} disabled={mixedFormat} onChange={(e) => setIAmPlaying(e.target.checked)}
             className="mt-0.5" style={{ width: "auto", flexShrink: 0 }} />
           <span>
             <span className="text-sm font-semibold block" style={{ color: "var(--ink)" }}>I'll be playing</span>
             <span className="text-xs" style={{ color: "var(--slate)" }}>
-              Uncheck this if you're only organizing — you'll still be the organizer either way, just not counted as one of the players.
+              {mixedFormat
+                ? "Locked on for this fixed roster — Pinder and Neetul are both players as well as the two scorekeepers."
+                : "Uncheck this if you're only organizing — you'll still be the organizer either way, just not counted as one of the players."}
             </span>
           </span>
         </label>
@@ -1275,6 +1337,8 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
 
   const participants = Object.entries(event.participantNames || {});
   const organizers = event.organizers || [];
+  const mixedEvent = isMixedAmericanoEvent(event);
+  const organizerLimit = mixedEvent ? 2 : 4;
   const spotsLeft = event.capacity - (event.participants || []).length;
   const iAmParticipant = (event.participants || []).includes(myUid);
   const canPickContact = contactPickerSupported();
@@ -1324,7 +1388,9 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
   const handleInviteOrganizer = async () => {
     const digits = orgPhone.replace(/[^0-9+]/g, "");
     if (!digits) return setOrgError("Enter a phone number.");
-    if (organizers.length >= 4) return setOrgError("This event already has the maximum of 4 organizers.");
+    if (mixedEvent && !orgName.trim()) return setOrgError("Enter Pinder or Neetul's name for this event.");
+    if (mixedEvent && !isMixedScorekeeperName(orgName)) return setOrgError("Only Pinder and Neetul should be organizers for this mixed event.");
+    if (organizers.length >= organizerLimit) return setOrgError(`This event already has the maximum of ${organizerLimit} organizers.`);
     setSendingOrgInvite(true);
     setOrgError("");
     try {
@@ -1341,6 +1407,10 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
 
   const makeOrganizer = async (uid, personName) => {
     setOrgError("");
+    if (mixedEvent && !isMixedScorekeeperName(personName)) {
+      setOrgError("Only Pinder and Neetul should be organizers for this mixed event.");
+      return;
+    }
     try {
       await addOrganizer(eventId, uid, personName);
     } catch (e) {
@@ -1443,7 +1513,25 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
       <p className="text-sm mb-1" style={{ color: "var(--slate)" }}>{formatEventWhen(event)}</p>
       <p className="text-sm mb-1" style={{ color: "var(--slate)" }}>{event.courts}</p>
 
-      {editingRounds ? (
+      {event.drawError ? (
+        <div className="text-sm font-semibold mb-4 px-3 py-2.5 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
+          {event.drawError}
+        </div>
+      ) : null}
+
+      {mixedEvent ? (
+        <div className="rally-card p-4 mb-4" style={{ borderColor: "var(--court-blue)" }}>
+          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Mixed Americano · fixed optimized draw</div>
+          <div className="text-xs" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
+            6 female + 6 male · 6 rounds · 3 courts. Every male/female partnership occurs exactly once.
+            Future rounds unlock only after all three courts in the current round have scores. Keep Pinder and Neetul as the only organizers so only they can score.
+          </div>
+        </div>
+      ) : null}
+
+      {mixedEvent ? (
+        <p className="text-sm mb-5" style={{ color: "var(--slate)" }}>6 rounds · fixed for this format</p>
+      ) : editingRounds ? (
         <div className="flex gap-2 items-center mb-5">
           <input type="number" min="1" step="1" value={roundsInput} onChange={(e) => setRoundsInput(e.target.value)}
             className="px-3 py-2 rounded-lg text-sm rally-tabular"
@@ -1477,7 +1565,9 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
       <div className="rally-card p-4 mb-5">
         <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Organizers</div>
         <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
-          Up to 4. Only organizers can invite, add, edit, or remove players, and manage scoring — whether or not they're playing themselves.
+          {mixedEvent
+            ? "For this event, keep only Pinder and Neetul as organizers. Only organizers can enter or edit scores."
+            : "Up to 4. Only organizers can invite, add, edit, or remove players, and manage scoring — whether or not they're playing themselves."}
         </div>
         {orgError ? (
           <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--danger-light)", color: "var(--danger)" }}>
@@ -1525,9 +1615,9 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
           )
         ) : null}
 
-        {isOrganizer && organizers.length < 4 && participants.some(([uid]) => !organizers.includes(uid)) ? (
+        {isOrganizer && organizers.length < organizerLimit && participants.some(([uid, pname]) => !organizers.includes(uid) && (!mixedEvent || isMixedScorekeeperName(pname))) ? (
           <div className="flex flex-wrap gap-1.5 mb-3">
-            {participants.filter(([uid]) => !organizers.includes(uid)).map(([uid, pname]) => (
+            {participants.filter(([uid, pname]) => !organizers.includes(uid) && (!mixedEvent || isMixedScorekeeperName(pname))).map(([uid, pname]) => (
               <button key={uid} type="button" onClick={() => makeOrganizer(uid, pname)}
                 className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{ width: "auto", border: "1px dashed var(--line-strong)", color: "var(--slate)" }}>
@@ -1537,7 +1627,7 @@ function EventNotFull({ event, eventId, myUid, myPhone, isOrganizer, onInvited, 
           </div>
         ) : null}
 
-        {isOrganizer && organizers.length < 4 ? (
+        {isOrganizer && organizers.length < organizerLimit ? (
           <React.Fragment>
             <div style={{ height: 1, background: "var(--line)", margin: "12px 0" }} />
             <div className="text-xs font-semibold mb-2" style={{ color: "var(--slate)" }}>
@@ -1763,7 +1853,7 @@ function EventCourtCard({ court, players, editing, draftA, draftB, onChangeA, on
   return (
     <div className="rally-court-card p-4">
       <div className="text-xs font-bold uppercase mb-3" style={{ color: "var(--court-blue-ink)", opacity: 0.75 }}>
-        Court {court.court}
+        Court #{court.court}
       </div>
       <div className="flex items-center justify-between gap-3">
         <EventTeamLabel players={players} ids={court.teamA} winning={aWins} />
@@ -1771,28 +1861,45 @@ function EventCourtCard({ court, players, editing, draftA, draftB, onChangeA, on
       </div>
       <div className="rally-net-line my-3" />
       <div className="flex items-center justify-between gap-3">
+        <EventTeamLabel players={players} ids={court.teamB} winning={bWins} />
         <ScoreDisplay value={displayB} editing={editing} onChange={onChangeB} ariaLabel="Team B score" />
-        <EventTeamLabel players={players} ids={court.teamB} winning={bWins} align="right" />
       </div>
     </div>
   );
 }
 
-function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, expanded, onToggle, pointsTarget, eventId, editable }) {
-  const complete = roundIsComplete(round);
+function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, expanded, onToggle, pointsTarget, eventId, editable, autoAdvance = false }) {
+  const complete = autoAdvance
+    ? round.courts.every((c) => c.scoreA != null && c.scoreB != null && c.scoreA + c.scoreB === pointsTarget)
+    : roundIsComplete(round);
   // Only used to seed the very first render, same reasoning as
   // before: this device's own edit/confirm taps control it from
   // here, deliberately not re-synced from remote confirmed changes.
-  const [editing, setEditing] = useState(!complete && editable);
+  const [editing, setEditing] = useState(autoAdvance ? editable : (!complete && editable));
   const [drafts, setDrafts] = useState(() => {
     const m = {};
     round.courts.forEach((c) => { m[c.court] = { scoreA: c.scoreA, scoreB: c.scoreB }; });
     return m;
   });
 
+  // In the mixed format the score boxes stay editable throughout, so
+  // keep local drafts in step with Firestore snapshots from the other
+  // organizer's phone. Local keystrokes already dispatch immediately,
+  // so this mirrors rather than fights the value being typed.
+  useEffect(() => {
+    if (!autoAdvance) return;
+    const m = {};
+    round.courts.forEach((c) => { m[c.court] = { scoreA: c.scoreA, scoreB: c.scoreB }; });
+    setDrafts(m);
+  }, [autoAdvance, round]);
+
   const allFilled = round.courts.every((c) => {
     const d = drafts[c.court];
     return d && d.scoreA != null && d.scoreB != null;
+  });
+  const allValid = allFilled && round.courts.every((c) => {
+    const d = drafts[c.court];
+    return !autoAdvance || (d.scoreA + d.scoreB === pointsTarget);
   });
 
   // Every keystroke still saves to Firestore, debounced, same as
@@ -1802,6 +1909,10 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
   // Confirm button below is actually tapped.
   const handleDraftChange = (courtNumber, field, value) => {
     setDrafts((prev) => ({ ...prev, [courtNumber]: { ...prev[courtNumber], [field]: value } }));
+    // Update local tournament state immediately so Standings reacts on
+    // the same keystroke; Firestore then syncs the same value to every
+    // other phone a fraction of a second later.
+    dispatch({ roundIndex, courtPatches: { [courtNumber]: { [field]: value } } });
     syncPadelScoreField(eventId, roundIndex, courtNumber, field, value);
   };
 
@@ -1867,7 +1978,15 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
             </div>
           ) : null}
           {editable ? (
-            editing ? (
+            autoAdvance ? (
+              <div className="text-xs mt-4 px-1" style={{ color: allValid ? "var(--court-blue)" : "var(--slate)" }}>
+                {allValid
+                  ? "All three courts have valid scores — the next round unlocks automatically. Scores remain editable."
+                  : allFilled
+                    ? `Each court must total ${pointsTarget} points before the next round unlocks.`
+                    : `Enter both scores on all three courts (each match totals ${pointsTarget}) to unlock the next round.`}
+              </div>
+            ) : editing ? (
               <button type="button" onClick={handleConfirm} disabled={!allFilled}
                 className="w-full py-2.5 rounded-lg text-sm font-bold"
                 style={{ marginTop: "16px", background: "var(--chip-solid)", color: "var(--chip-solid-ink)", opacity: allFilled ? 1 : 0.5 }}>
@@ -1935,6 +2054,7 @@ function EventStandings({ tournament }) {
 }
 
 function EventFull({ event, eventId, isOrganizer }) {
+  const mixedEvent = isMixedAmericanoEvent(event);
   const [tournament, setTournament] = useState(null);
   const [fullDraw, setFullDraw] = useState(null);
   const [activeTab, setActiveTab] = useState("play");
@@ -1959,10 +2079,12 @@ function EventFull({ event, eventId, isOrganizer }) {
   // regular participant is the expected, correct behavior, not
   // something to surface as a problem.
   useEffect(() => {
-    if (!isOrganizer) { setFullDraw(null); return; }
+    // Mixed Americano deliberately hides future rounds from everyone,
+    // including organizers, until the current round has all 3 scores.
+    if (!isOrganizer || mixedEvent) { setFullDraw(null); return; }
     const unsub = watchPadelFullDraw(eventId, (d) => setFullDraw(d), () => setFullDraw(null));
     return () => unsub();
-  }, [eventId, isOrganizer]);
+  }, [eventId, isOrganizer, mixedEvent]);
 
   const anyScoresEntered = tournament && tournament.rounds.some((r) =>
     r.courts.some((c) => c.scoreA != null || c.scoreB != null));
@@ -2025,7 +2147,14 @@ function EventFull({ event, eventId, isOrganizer }) {
         </div>
       ) : null}
 
-      {isOrganizer ? (
+      {mixedEvent ? (
+        <div className="rally-card p-4 mb-5" style={{ borderColor: "var(--court-blue)" }}>
+          <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Mixed Americano · 6 rounds</div>
+          <div className="text-xs" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
+            Court #2, Court #3 and Court #4. Future rounds stay hidden until all three matches in the current round have both scores entered. Standings update live as scores are typed.
+          </div>
+        </div>
+      ) : isOrganizer ? (
         <div className="rally-card p-4 mb-5">
           <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Rounds</div>
           <div className="text-xs mb-3" style={{ color: "var(--slate)" }}>
@@ -2158,10 +2287,10 @@ function EventFull({ event, eventId, isOrganizer }) {
 
       {activeTab === "play" ? (
         tournament.rounds.map((round, idx) => (
-          <EventRoundBlock key={idx} round={round} roundIndex={idx} totalRounds={tournament.rounds.length}
+          <EventRoundBlock key={idx} round={round} roundIndex={idx} totalRounds={event.numRounds || tournament.rounds.length}
             players={tournament.players} dispatch={dispatch} expanded={expandedIdx === idx}
             onToggle={() => setExpandedIdx(expandedIdx === idx ? -1 : idx)}
-            pointsTarget={tournament.pointsTarget} eventId={eventId} editable={isOrganizer} />
+            pointsTarget={tournament.pointsTarget} eventId={eventId} editable={isOrganizer} autoAdvance={mixedEvent} />
         ))
       ) : (
         <EventStandings tournament={tournament} />
@@ -2679,7 +2808,7 @@ function EventsApp() {
           </div>
 
           {!myEvents.length ? (
-            <CreateEventForm onCreate={handleCreate} creating={creating} error={createError} />
+            <CreateEventForm onCreate={handleCreate} creating={creating} error={createError} creatorName={profile.name} />
           ) : null}
         </div>
       ) : null}
@@ -2692,7 +2821,7 @@ function EventsApp() {
               &larr; Cancel
             </button>
           </div>
-          <CreateEventForm onCreate={handleCreate} creating={creating} error={createError} />
+          <CreateEventForm onCreate={handleCreate} creating={creating} error={createError} creatorName={profile.name} />
         </div>
       ) : null}
 
