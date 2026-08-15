@@ -79,3 +79,11 @@ For this fixed mixed event, the account that creates the event is automatically 
 Pinder and Neetul receive separate organizer invitations using the phone numbers tied to their Court Pop/Firebase Auth accounts. Each must sign in with that same verified phone number and accept the organizer invitation. Acceptance adds that account's Firebase UID to the event's `organizers` array. Score writes are authorized against those organizer UIDs, not against display-name text.
 
 The mixed event therefore supports up to three organizers/scorekeepers: the creator, Pinder, and Neetul.
+
+## Separate live scoring page
+
+The mixed 12-player event keeps setup and organizer invitations on `events.html`. Once organizer invitations for Pinder and Neetul have been sent, the organizer can open:
+
+`mixed-americano-12-event.html?event=<EVENT_ID>`
+
+That page contains only two top-level views: **Scores** and **Standings**. Scores remain organizer-only; any signed-in viewer can follow the live scores and standings. Standings recalculate as soon as both team scores for a court are present. Round N+1 is still revealed by the existing Cloud Function only after all three courts in Round N have both scores entered.

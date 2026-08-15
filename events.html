@@ -2339,6 +2339,12 @@ function EventFull({ event, eventId, isOrganizer, myUid }) {
     return invite ? { status: invite.status || "pending", phone: invite.invitedPhone || invite.id || "" } : { status: "none" };
   };
 
+  const mixedScorekeeperInvitesSent = ["Pinder", "Neetul"].every((personName) => {
+    const status = mixedOrganizerState(personName).status;
+    return status === "pending" || status === "accepted";
+  });
+  const mixedLiveUrl = `mixed-americano-12-event.html?event=${encodeURIComponent(eventId)}`;
+
   const anyScoresEntered = tournament && tournament.rounds.some((r) =>
     r.courts.some((c) => c.scoreA != null || c.scoreB != null));
 
@@ -2536,6 +2542,36 @@ function EventFull({ event, eventId, isOrganizer, myUid }) {
         </div>
       ) : null}
 
+      {mixedEvent ? (
+        <React.Fragment>
+          {isOrganizer && fullDraw ? <MixedDrawAudit fullDraw={fullDraw} /> : null}
+
+          <div className="rally-card p-4 mb-5" style={{ borderColor: "var(--court-blue)" }}>
+            <div className="text-sm font-bold mb-1" style={{ color: "var(--ink)" }}>Live Scores & Standings</div>
+            <div className="text-xs mb-3" style={{ color: "var(--slate)", lineHeight: 1.55 }}>
+              Scoring now opens on a separate tournament page. Scores and Standings sit side by side as tabs at the top, and the standings refresh as soon as both scores on a court are entered.
+            </div>
+            {isOrganizer && !mixedScorekeeperInvitesSent ? (
+              <div className="text-xs font-semibold mb-3 px-3 py-2 rounded-lg" style={{ background: "var(--ball-light)", color: "var(--ink)" }}>
+                Send the organizer invitations to both Pinder and Neetul above first. The live tournament button unlocks as soon as both invitations have been sent; they can accept later from their own phones.
+              </div>
+            ) : null}
+            <a href={mixedLiveUrl}
+              onClick={(e) => { if (isOrganizer && !mixedScorekeeperInvitesSent) e.preventDefault(); }}
+              aria-disabled={isOrganizer && !mixedScorekeeperInvitesSent ? "true" : "false"}
+              className="rally-btn-primary w-full py-3 text-sm font-semibold block text-center"
+              style={{ textDecoration: "none", opacity: isOrganizer && !mixedScorekeeperInvitesSent ? 0.45 : 1, pointerEvents: isOrganizer && !mixedScorekeeperInvitesSent ? "none" : "auto" }}>
+              Open Scores & Standings
+            </a>
+            {!isOrganizer ? (
+              <div className="text-xs mt-2" style={{ color: "var(--slate)" }}>
+                You can open the same page in live view. Only organizers can edit scores.
+              </div>
+            ) : null}
+          </div>
+        </React.Fragment>
+      ) : (
+        <React.Fragment>
       <div className="flex gap-2 mb-5 rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--line)", padding: "0.25rem" }}>
         <button type="button" onClick={() => setActiveTab("play")}
           className={"rally-tab-btn flex-1 py-2 text-sm" + (activeTab === "play" ? " active" : "")}>
@@ -2589,6 +2625,9 @@ function EventFull({ event, eventId, isOrganizer, myUid }) {
         ))
       ) : (
         <EventStandings tournament={tournament} />
+      )}
+
+        </React.Fragment>
       )}
     </div>
   );
