@@ -1106,7 +1106,7 @@ function CreateEventForm({ onCreate, creating, error, creatorName }) {
       capacity: Number(capacity),
       tournamentFormat,
       numRounds: Number(numRounds),
-      pointsTarget: 24,
+      pointsTarget: mixedFormat ? null : 24,
       notes: notes.trim(),
     }, iAmPlaying);
   };
@@ -1899,7 +1899,7 @@ function EventCourtCard({ court, players, editing, draftA, draftB, onChangeA, on
 
 function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, expanded, onToggle, pointsTarget, eventId, editable, autoAdvance = false }) {
   const complete = autoAdvance
-    ? round.courts.every((c) => c.scoreA != null && c.scoreB != null && c.scoreA + c.scoreB === pointsTarget)
+    ? round.courts.every((c) => c.scoreA != null && c.scoreB != null)
     : roundIsComplete(round);
   // Only used to seed the very first render, same reasoning as
   // before: this device's own edit/confirm taps control it from
@@ -1926,10 +1926,10 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
     const d = drafts[c.court];
     return d && d.scoreA != null && d.scoreB != null;
   });
-  const allValid = allFilled && round.courts.every((c) => {
-    const d = drafts[c.court];
-    return !autoAdvance || (d.scoreA + d.scoreB === pointsTarget);
-  });
+  // Mixed Americano uses open scoring: any non-negative whole-number
+  // final score is valid. The next round unlocks once both sides of all
+  // three courts have a score; there is no fixed points-total check.
+  const allValid = allFilled;
 
   // Every keystroke still saves to Firestore, debounced, same as
   // before — that's what makes closing the app mid-type safe. Local
@@ -1985,7 +1985,9 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
 
       {expanded ? (
         <div className="rally-fade-in">
-          <div className="text-xs mt-3 mb-3 px-1" style={{ color: "var(--slate)" }}>Playing to {pointsTarget} pts</div>
+          <div className="text-xs mt-3 mb-3 px-1" style={{ color: "var(--slate)" }}>
+            {autoAdvance ? "Open scoring · enter the final score for each court" : `Playing to ${pointsTarget} pts`}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {round.courts.map((court) => (
               <EventCourtCard key={court.court} court={court} players={players} editing={editing}
@@ -2010,10 +2012,8 @@ function EventRoundBlock({ round, roundIndex, totalRounds, players, dispatch, ex
             autoAdvance ? (
               <div className="text-xs mt-4 px-1" style={{ color: allValid ? "var(--court-blue)" : "var(--slate)" }}>
                 {allValid
-                  ? "All three courts have valid scores — the next round unlocks automatically. Scores remain editable."
-                  : allFilled
-                    ? `Each court must total ${pointsTarget} points before the next round unlocks.`
-                    : `Enter both scores on all three courts (each match totals ${pointsTarget}) to unlock the next round.`}
+                  ? "All three courts have scores — the next round unlocks automatically. Scores remain editable."
+                  : "Enter both final scores on all three courts to unlock the next round."}
               </div>
             ) : editing ? (
               <button type="button" onClick={handleConfirm} disabled={!allFilled}
