@@ -11,6 +11,7 @@ import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.13.0/f
 import {
   collection,
   addDoc,
+  deleteDoc,
   doc,
   getDocs,
   query,
@@ -24,39 +25,43 @@ import {
 
 const FORMAT = 'glass-mixed-americano-2026-10-24';
 const MARKER = 'Glass Court Mixed Americano · 24 Oct 2026';
-const FEMALES = ['Pinder', 'Ritika', 'Arunima', 'Rashida', 'Tunali', 'Shweta'];
+const FEMALES = ['Shruti', 'Ritika', 'Arunima', 'Rashida', 'Tunali', 'Shweta'];
 const MALES = ['Nishank', 'Nikhil', 'Santosh', 'Mayur', 'Raj', 'Yashraj'];
-const SCOREKEEPERS = ['Pinder', 'Arunima'];
+const SCOREKEEPERS = ['Neetul', 'Arunima'];
+const LEGACY_PLAYER_NAME = 'Pinder';
 
+// The optimized draw from the supplied workbook. Shruti occupies the
+// partnership slots previously assigned to Pinder; the balance therefore
+// remains identical: all 36 mixed partnerships once and max opponent repeat 2.
 const TEMPLATE = [
   [
-    [1, ['Nishank', 'Pinder'], ['Mayur', 'Rashida']],
+    [1, ['Nishank', 'Shruti'], ['Mayur', 'Rashida']],
     [2, ['Nikhil', 'Ritika'], ['Raj', 'Tunali']],
     [3, ['Santosh', 'Arunima'], ['Yashraj', 'Shweta']],
   ],
   [
     [1, ['Nishank', 'Arunima'], ['Santosh', 'Tunali']],
     [2, ['Mayur', 'Shweta'], ['Raj', 'Rashida']],
-    [3, ['Nikhil', 'Pinder'], ['Yashraj', 'Ritika']],
+    [3, ['Nikhil', 'Shruti'], ['Yashraj', 'Ritika']],
   ],
   [
     [1, ['Raj', 'Shweta'], ['Yashraj', 'Tunali']],
     [2, ['Nishank', 'Rashida'], ['Nikhil', 'Arunima']],
-    [3, ['Santosh', 'Ritika'], ['Mayur', 'Pinder']],
+    [3, ['Santosh', 'Ritika'], ['Mayur', 'Shruti']],
   ],
   [
     [1, ['Nikhil', 'Rashida'], ['Santosh', 'Shweta']],
     [2, ['Mayur', 'Ritika'], ['Yashraj', 'Arunima']],
-    [3, ['Nishank', 'Tunali'], ['Raj', 'Pinder']],
+    [3, ['Nishank', 'Tunali'], ['Raj', 'Shruti']],
   ],
   [
     [1, ['Nikhil', 'Tunali'], ['Mayur', 'Arunima']],
-    [2, ['Nishank', 'Shweta'], ['Yashraj', 'Pinder']],
+    [2, ['Nishank', 'Shweta'], ['Yashraj', 'Shruti']],
     [3, ['Santosh', 'Rashida'], ['Raj', 'Ritika']],
   ],
   [
     [1, ['Nishank', 'Ritika'], ['Nikhil', 'Shweta']],
-    [2, ['Santosh', 'Pinder'], ['Raj', 'Arunima']],
+    [2, ['Santosh', 'Shruti'], ['Raj', 'Arunima']],
     [3, ['Mayur', 'Tunali'], ['Yashraj', 'Rashida']],
   ],
 ];
@@ -74,6 +79,8 @@ let eventUnsub = null;
 let drawUnsub = null;
 let sentInviteUnsub = null;
 let myInviteUnsub = null;
+let migrationInProgress = false;
+let legacyInviteCleanupDone = false;
 const expanded = new Set([0]);
 
 const idFor = (name, gender) =>
@@ -84,6 +91,8 @@ const PLAYERS = [
   ...MALES.map((name) => ({ id: idFor(name, 'M'), name, gender: 'M' })),
 ];
 const ID_BY_NAME = new Map(PLAYERS.map((player) => [player.name, player.id]));
+const LEGACY_PLAYER_ID = idFor(LEGACY_PLAYER_NAME, 'F');
+const SHRUTI_ID = idFor('Shruti', 'F');
 const ROUNDS = TEMPLATE.map((matches) => ({
   courts: matches.map(([court, teamA, teamB]) => ({
     court,
@@ -103,6 +112,10 @@ function escapeHtml(value) {
     "'": '&#39;',
     '"': '&quot;',
   }[char]));
+}
+
+function normalizedName(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function playerName(id) {
@@ -379,7 +392,111 @@ function renderAdmins() {
   }
 }
 
+function hasLegacyPinderData() {
+  if (!eventData || !drawData) return false;
+  const drawHasPinder = (drawData.players || []).some((player) =>
+    player.id === LEGACY_PLAYER_ID || normalizedName(player.name) === 'pinder',
+  ) || (drawData.rounds || []).some((round) =>
+    (round.courts || []).some((court) =>
+      [...(court.teamA || []), ...(court.teamB || [])].includes(LEGACY_PLAYER_ID),
+    ),
+  );
+  const eventHasPinder = Object.values(eventData.participantNames || {})
+    .some((name) => normalizedName(name) === 'pinder');
+  return drawHasPinder || eventHasPinder;
+}
+
+async function cleanLegacyPinderInvites() {
+  if (legacyInviteCleanupDone || !isOrganizer || !eventId) return;
+  legacyInviteCleanupDone = true;
+  try {
+    const snapshot = await getDocs(collection(db, 'padelEvents', eventId, 'organizerInvites'));
+    await Promise.all(snapshot.docs
+      .filter((inviteDoc) => normalizedName(inviteDoc.data().invitedName) === 'pinder')
+      .map((inviteDoc) => deleteDoc(inviteDoc.ref)));
+  } catch (error) {
+    console.warn('Could not remove a legacy Pinder organizer invitation', error);
+  }
+}
+
+async function migrateLegacyRoster() {
+  if (migrationInProgress || !isOrganizer || !hasLegacyPinderData()) return;
+  migrationInProgress = true;
+  el('loading').classList.remove('hidden');
+  el('loading').textContent = 'Updating roster from Pinder to Shruti…';
+
+  try {
+    const participantNames = { ...(eventData.participantNames || {}) };
+    const organizerAliases = { ...(eventData.organizerAliases || {}) };
+
+    const pinderAdminIds = (eventData.organizers || []).filter((uid) =>
+      uid !== eventData.createdBy && normalizedName(
+        organizerAliases[uid] || participantNames[uid],
+      ) === 'pinder',
+    );
+
+    delete participantNames[LEGACY_PLAYER_ID];
+    participantNames[SHRUTI_ID] = 'Shruti';
+    pinderAdminIds.forEach((uid) => {
+      delete participantNames[uid];
+      delete organizerAliases[uid];
+    });
+
+    const participants = [...new Set([
+      ...(eventData.participants || []).filter((uid) =>
+        uid !== LEGACY_PLAYER_ID &&
+        !pinderAdminIds.includes(uid) &&
+        normalizedName((eventData.participantNames || {})[uid]) !== 'pinder',
+      ),
+      SHRUTI_ID,
+    ])];
+    const organizers = (eventData.organizers || []).filter((uid) => !pinderAdminIds.includes(uid));
+
+    const migratedRounds = (drawData.rounds || ROUNDS).map((round) => ({
+      ...round,
+      courts: (round.courts || []).map((court) => ({
+        ...court,
+        teamA: (court.teamA || []).map((id) => id === LEGACY_PLAYER_ID ? SHRUTI_ID : id),
+        teamB: (court.teamB || []).map((id) => id === LEGACY_PLAYER_ID ? SHRUTI_ID : id),
+      })),
+    }));
+
+    await Promise.all([
+      updateDoc(doc(db, 'padelEvents', eventId), {
+        participants,
+        participantNames,
+        organizers,
+        organizerAliases,
+        updatedAt: serverTimestamp(),
+      }),
+      setDoc(doc(db, 'padelEvents', eventId, 'tournament', 'draw'), {
+        players: PLAYERS,
+        rounds: migratedRounds,
+        updatedAt: serverTimestamp(),
+      }, { merge: true }),
+    ]);
+
+    eventData = { ...eventData, participants, participantNames, organizers, organizerAliases };
+    drawData = { ...drawData, players: PLAYERS, rounds: migratedRounds };
+    await cleanLegacyPinderInvites();
+    toast('Roster updated: Shruti replaces Pinder');
+  } catch (error) {
+    console.error('Roster migration failed', error);
+    showError(error.message || 'Could not update the Glass Court roster.');
+  } finally {
+    migrationInProgress = false;
+    renderAll();
+  }
+}
+
 function renderAll() {
+  if (!eventData || !drawData || migrationInProgress) return;
+  isOrganizer = (eventData.organizers || []).includes(user.uid);
+  if (isOrganizer && hasLegacyPinderData()) {
+    void migrateLegacyRoster();
+    return;
+  }
+
   el('loading').classList.add('hidden');
   el('error').classList.add('hidden');
   el('createPanel').classList.add('hidden');
@@ -388,7 +505,34 @@ function renderAll() {
   renderRounds();
   renderStandings();
   renderDraw();
-  maybeRevealNext();
+  void cleanLegacyPinderInvites();
+  void maybeRevealNext();
+}
+
+function updateInviteUi(invites) {
+  SCOREKEEPERS.forEach((name) => {
+    const invite = invites.find((item) =>
+      normalizedName(item.invitedName) === normalizedName(name),
+    );
+    const statusNode = document.querySelector(`[data-invite-status="${name}"]`);
+    const whatsappNode = document.querySelector(`[data-whatsapp="${name}"]`);
+    if (!statusNode || !whatsappNode) return;
+
+    if (!invite) {
+      statusNode.textContent = 'Not invited yet.';
+      whatsappNode.classList.add('hidden');
+      return;
+    }
+
+    statusNode.textContent = invite.status === 'accepted'
+      ? 'Accepted — score editing enabled.'
+      : 'Invitation pending.';
+    const base = `${location.origin}${location.pathname.replace(/[^/]+$/, '')}`;
+    const liveLink = `${base}glass-court-mixed-americano.html?event=${encodeURIComponent(eventId)}`;
+    const message = `Hi ${name}, you have been invited as an administrator for the Glass Court Mixed Americano on 24 October 2026. Open this link, sign in using this invited phone number, and tap Accept administrator invitation: ${liveLink}`;
+    whatsappNode.href = `https://wa.me/${String(invite.invitedPhone || invite.id || '').replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+    whatsappNode.classList.remove('hidden');
+  });
 }
 
 function startEventListeners() {
@@ -414,33 +558,14 @@ function startEventListeners() {
     (snapshot) => {
       if (!snapshot.exists()) return;
       drawData = snapshot.data();
-      renderAll();
+      if (eventData) renderAll();
     },
     (error) => showError(error.message),
   );
 
   sentInviteUnsub = watchSentOrganizerInvites(eventId, (invites) => {
-    SCOREKEEPERS.forEach((name) => {
-      const invite = invites.find((item) =>
-        (item.invitedName || '').trim().toLowerCase() === name.toLowerCase(),
-      );
-      const statusNode = document.querySelector(`[data-invite-status="${name}"]`);
-      const whatsappNode = document.querySelector(`[data-whatsapp="${name}"]`);
-      if (!statusNode || !whatsappNode) return;
-      if (!invite) {
-        statusNode.textContent = 'Not invited yet.';
-        whatsappNode.classList.add('hidden');
-        return;
-      }
-      statusNode.textContent = invite.status === 'accepted'
-        ? 'Accepted — score editing enabled.'
-        : 'Invitation pending.';
-      const base = `${location.origin}${location.pathname.replace(/[^/]+$/, '')}`;
-      const liveLink = `${base}glass-court-mixed-americano.html?event=${encodeURIComponent(eventId)}`;
-      const message = `Hi ${name}, you have been invited as an administrator for the Glass Court Mixed Americano on 24 October 2026. Open this link, sign in using this invited phone number, and tap Accept administrator invitation: ${liveLink}`;
-      whatsappNode.href = `https://wa.me/${String(invite.invitedPhone || invite.id || '').replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-      whatsappNode.classList.remove('hidden');
-    });
+    updateInviteUi(invites);
+    if (isOrganizer && !legacyInviteCleanupDone) void cleanLegacyPinderInvites();
   }, () => {});
 }
 
@@ -550,6 +675,12 @@ function setupInvites() {
 
 async function acceptPendingOrganizerInvite() {
   if (!pendingOrganizerInvite) return;
+  const invitedName = normalizedName(pendingOrganizerInvite.invitedName);
+  if (!SCOREKEEPERS.map(normalizedName).includes(invitedName)) {
+    el('acceptStatus').textContent = 'This administrator invitation is no longer valid for this event.';
+    return;
+  }
+
   const button = el('acceptAdmin');
   button.disabled = true;
   el('acceptStatus').textContent = 'Accepting invitation…';
