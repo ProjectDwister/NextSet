@@ -1,12 +1,15 @@
 // Bump this whenever the app-shell file list below changes; old caches
 // get cleaned up automatically on activate.
-const CACHE_NAME = 'nextset-v29';
+const CACHE_NAME = 'nextset-v30';
 
 const APP_SHELL = [
   './index.html',
   './rally.html',
   './events.html',
   './mixed-americano-12-event.html',
+  './glass-court-mixed-americano.html',
+  './glass-court-mixed-americano.css',
+  './glass-court-mixed-americano.js',
   './auth.js',
   './events.js',
   './invites.js',
@@ -21,13 +24,6 @@ const APP_SHELL = [
   './icons/apple-touch-icon.png',
 ];
 
-// cache.addAll() is all-or-nothing — if even one of these URLs fails to
-// fetch, the whole install rejects and the service worker never
-// activates at all, with no visible error anywhere. That's the leading
-// suspect for why installability has been failing outright. Caching
-// each file individually, with its own catch, means one bad entry
-// can't take the rest down — installation succeeds either way, and any
-// real failure gets logged instead of silently sinking everything.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
@@ -52,12 +48,6 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Network-first, falling back to cache. Deliberately NOT cache-first —
-// a cache-first strategy would mean everyone stays on whatever version
-// was first installed until they happen to clear it, which defeats the
-// point of being able to keep shipping fixes. This only ever touches
-// this app's own files; anything going to Firebase/Google APIs is left
-// completely alone.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
@@ -74,10 +64,6 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// A push message only ever carries a data payload here — no images or
-// actions, kept deliberately simple. If parsing ever fails for any
-// reason, fall back to a generic notification rather than showing
-// nothing at all.
 self.addEventListener('push', (event) => {
   let data = {};
   try {
