@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -41,6 +40,12 @@
 <div class="actions"><button class="btn secondary" id="share" type="button">Share live link</button><button class="btn secondary" id="copyId" type="button">Copy Event ID</button></div>
 <div id="adminList" style="margin-top:12px"></div>
 </div>
+<section class="card hidden" id="acceptPanel">
+<h2>Accept administrator invitation</h2>
+<div class="sub">This invitation is tied to the phone number used for your Court Pop login. Accept it to enable score entry, editing and clearing.</div>
+<div class="status" id="acceptStatus"></div>
+<button class="btn" id="acceptAdmin" type="button" style="margin-top:12px">Accept administrator invitation</button>
+</section>
 <section class="card hidden" id="invitePanel">
 <h2>Administrator invitations</h2>
 <div class="sub">You are already an administrator as the event creator. Invite Pinder and Arunima using the same phone numbers they will use for Firebase SMS login.</div>
