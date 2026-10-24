@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<script>
+  try {
+    if (localStorage.getItem('nextset-theme') === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  } catch (e) {}
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no"/>
+<title>Combined Scores & Standings | Court Pop</title>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="icon" href="./icons/icon-192.png"/>
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png"/>
+<meta name="theme-color" content="#0b1020"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&family=Fraunces:ital,wght@0,500;1,500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="./glass-court-mixed-americano.css"/>
+<style>
+  .summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:16px}
+  .event-summary{padding:16px;border-radius:18px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .event-summary h2{font-size:1rem;margin:0 0 6px}
+  .event-summary .progress{font-family:'Archivo Black',Archivo,sans-serif;font-size:1.65rem;margin:10px 0 2px}
+  .event-summary .small{font-size:.8rem;color:var(--muted);line-height:1.45}
+  .event-summary a{display:inline-block;margin-top:10px;color:var(--mint);font-size:.82rem;font-weight:700;text-decoration:none}
+  .combined-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+  .kpi{padding:14px;border-radius:16px;background:var(--panel);border:1px solid var(--line);text-align:center}
+  .kpi strong{display:block;font-size:1.35rem;color:var(--ink)}
+  .kpi span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .tabs.two{grid-template-columns:repeat(2,1fr)}
+  .scores-table{width:100%;border-collapse:collapse;min-width:760px}
+  .scores-table th,.scores-table td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  .scores-table th{font-size:.74rem;color:var(--muted)}
+  .scores-table th:first-child,.scores-table td:first-child{text-align:left}
+  .scores-table .total{font-weight:800;color:var(--mint)}
+  .event-tag{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:7px 10px;font-size:.78rem;color:var(--muted);background:var(--panel2)}
+  .event-tag.live{color:var(--mint)}
+  .notice{font-size:.82rem;color:var(--muted);line-height:1.5;margin-top:8px}
+  .empty-state{text-align:center;padding:24px;color:var(--muted)}
+  @media(max-width:760px){
+    .summary-grid{grid-template-columns:1fr}
+    .combined-kpis{grid-template-columns:repeat(2,1fr)}
+    .shell{padding-left:12px;padding-right:12px}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="top">
+    <a class="back" href="events.html">← Back to Events</a>
+    <div class="actions">
+      <button class="btn secondary" id="share" type="button">Share page</button>
+      <button class="theme" id="theme" type="button">☼</button>
+    </div>
+  </div>
+
+  <section class="hero">
+    <div class="eyebrow">Court Pop · Live consolidation</div>
+    <h1>Combined Scores<br/>&amp; Standings</h1>
+    <div class="meta">
+      <span><strong>Event 1:</strong> Glass Court Mixed Americano</span>
+      <span><strong>Event 2:</strong> Bonus Rounds at Centre Court</span>
+    </div>
+    <div class="pills">
+      <span class="pill live">Live sync active</span>
+      <span class="pill">12 players</span>
+      <span class="pill">12 combined games per player</span>
+      <span class="pill">Courts #1, #2 and #3</span>
+    </div>
+  </section>
+
+  <div class="card loading" id="loading">Connecting to both events…</div>
+  <div class="card hidden" id="error"></div>
+
+  <main class="hidden" id="app">
+    <section class="summary-grid">
+      <article class="event-summary" id="glassSummary"></article>
+      <article class="event-summary" id="bonusSummary"></article>
+    </section>
+
+    <section class="combined-kpis">
+      <div class="kpi"><strong id="matchesScored">0</strong><span>matches scored</span></div>
+      <div class="kpi"><strong id="roundsCompleted">0</strong><span>rounds completed</span></div>
+      <div class="kpi"><strong id="leaderPoints">0</strong><span>leader points</span></div>
+      <div class="kpi"><strong id="playersActive">12</strong><span>players ranked</span></div>
+    </section>
+
+    <div class="tabs two" role="tablist">
+      <button class="tab active" data-tab="scores" type="button">Scores</button>
+      <button class="tab" data-tab="standings" type="button">Standings</button>
+    </div>
+
+    <section data-panel="scores">
+      <div class="card table-wrap">
+        <table class="scores-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Glass points</th>
+              <th>Bonus points</th>
+              <th>Combined points</th>
+              <th>Played</th>
+              <th>Against</th>
+              <th>+/-</th>
+              <th>Wins</th>
+            </tr>
+          </thead>
+          <tbody id="scoresBody"></tbody>
+        </table>
+        <div class="notice">A match contributes to the combined table as soon as both team scores for that court have been entered. A legacy Pinder record, if present in the first event, is consolidated under Shruti.</div>
+      </div>
+    </section>
+
+    <section class="hidden" data-panel="standings">
+      <div class="card table-wrap">
+        <table class="standings">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Player</th>
+              <th>Played</th>
+              <th>Points</th>
+              <th>Against</th>
+              <th>+/-</th>
+              <th>Wins</th>
+            </tr>
+          </thead>
+          <tbody id="standingsBody"></tbody>
+        </table>
+        <div class="notice">Combined ranking order: total points, point difference, wins, then player name.</div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast hidden" id="toast"></div>
+<script type="module" src="./combined-scores-standings.js"></script>
+</body>
+</html>
