@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<script>
+  try {
+    if (localStorage.getItem('nextset-theme') === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  } catch (e) {}
+</script>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" name="viewport"/>
+<title>Bonus Rounds at Centre Court | Court Pop</title>
+<link href="./manifest.json" rel="manifest"/>
+<link href="./icons/icon-192.png" rel="icon"/>
+<link href="./icons/apple-touch-icon.png" rel="apple-touch-icon"/>
+<meta content="#0b1020" name="theme-color"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Black&family=Fraunces:ital,wght@0,500;1,500&display=swap" rel="stylesheet"/>
+<link href="./glass-court-mixed-americano.css" rel="stylesheet"/>
+<style>
+  .form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
+  .form-field label{display:block;font-size:.78rem;font-weight:700;margin-bottom:7px;color:var(--muted)}
+  .form-field input{width:100%;padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--chalk);color:var(--ink)}
+  @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="top"><a class="back" href="events.html">← Back to Events</a><button class="theme" id="theme" type="button">☼</button></div>
+  <section class="hero">
+    <div class="eyebrow">Court Pop · Fixed Mixed Americano</div>
+    <h1>Bonus Rounds<br/>at Centre Court</h1>
+    <div class="meta">
+      <span><strong>Venue:</strong> Centre Court</span>
+      <span id="eventWhen"><strong>Schedule:</strong> selected when the event is created</span>
+      <span><strong>Courts:</strong> #1, #2 and #3</span>
+    </div>
+    <div class="pills"><span class="pill">12 players</span><span class="pill">6 rounds</span><span class="pill">Same optimized draw</span><span class="pill live">Live scoring</span></div>
+  </section>
+
+  <div class="card loading" id="loading">Loading Court Pop…</div>
+  <div class="card hidden" id="error"></div>
+
+  <section class="card hidden" id="createPanel">
+    <h2>Create Bonus Rounds at Centre Court</h2>
+    <div class="sub">The roster and exact six-round draw are fixed. Create the event while logged in as Animesh; that account becomes the first administrator and is not added as a player.</div>
+    <div class="form-grid">
+      <div class="form-field"><label for="eventDate">Date</label><input id="eventDate" type="date" value="2026-10-24"/></div>
+      <div class="form-field"><label for="eventTime">Start time</label><input id="eventTime" type="time" value="12:00" step="60"/></div>
+      <div class="form-field"><label for="eventDuration">Duration (minutes)</label><input id="eventDuration" type="number" min="30" step="15" value="120"/></div>
+    </div>
+    <div class="rosters">
+      <div class="roster"><b>Female players</b><div>Shruti · Ritika · Arunima · Rashida · Tunali · Shweta</div></div>
+      <div class="roster"><b>Male players</b><div>Nishank · Nikhil · Santosh · Mayur · Raj · Yashraj</div></div>
+    </div>
+    <div class="create"><button class="btn" id="createEvent" type="button">Create Bonus Rounds event</button><div class="status" id="createStatus">The date and start time above can be changed before creation.</div></div>
+  </section>
+
+  <section class="hidden" id="eventApp">
+    <div class="card">
+      <div class="actions"><button class="btn secondary" id="share" type="button">Share live link</button><button class="btn secondary" id="copyId" type="button">Copy Event ID</button></div>
+      <div id="adminList" style="margin-top:12px"></div>
+    </div>
+
+    <section class="card hidden" id="acceptPanel">
+      <h2>Accept administrator invitation</h2>
+      <div class="sub">This invitation is tied to the mobile number used for Court Pop Firebase login. Accept it to enable score entry, editing and clearing.</div>
+      <div class="status" id="acceptStatus"></div>
+      <button class="btn" id="acceptAdmin" type="button" style="margin-top:12px">Accept administrator invitation</button>
+    </section>
+
+    <section class="card hidden" id="invitePanel">
+      <h2>Administrator invitations</h2>
+      <div class="sub">Animesh is the event creator and first administrator. Invite Neetul and Arunima using the same mobile numbers they will use for Firebase SMS login. Neetul is an administrator only and does not play.</div>
+      <div class="invite-grid">
+        <div class="invite-box" data-person="Neetul"><label>Neetul's phone number</label><input data-phone="Neetul" placeholder="+91…" type="tel"/><div class="invite-actions"><button class="btn" data-invite="Neetul" type="button">Invite</button><a class="btn secondary hidden" data-whatsapp="Neetul" rel="noopener" target="_blank">WhatsApp</a></div><div class="sub" data-invite-status="Neetul" style="margin-top:8px"></div></div>
+        <div class="invite-box" data-person="Arunima"><label>Arunima's phone number</label><input data-phone="Arunima" placeholder="+91…" type="tel"/><div class="invite-actions"><button class="btn" data-invite="Arunima" type="button">Invite</button><a class="btn secondary hidden" data-whatsapp="Arunima" rel="noopener" target="_blank">WhatsApp</a></div><div class="sub" data-invite-status="Arunima" style="margin-top:8px"></div></div>
+      </div>
+    </section>
+
+    <div class="tabs" role="tablist"><button class="tab active" data-tab="scores" type="button">Scores</button><button class="tab" data-tab="standings" type="button">Standings</button><button class="tab hidden" data-tab="draw" id="drawTab" type="button">Full draw</button></div>
+    <section data-panel="scores"><div id="rounds"></div></section>
+    <section class="hidden" data-panel="standings"><div class="card table-wrap"><table class="standings"><thead><tr><th>#</th><th>Player</th><th>Played</th><th>Points</th><th>Against</th><th>+/-</th><th>Wins</th></tr></thead><tbody id="standingsBody"></tbody></table></div></section>
+    <section class="hidden" data-panel="draw"><div class="card" id="drawPanel"></div></section>
+  </section>
+</div>
+<div class="toast hidden" id="toast"></div>
+<script src="./bonus-rounds-centre-court.js" type="module"></script>
+</body>
+</html>
