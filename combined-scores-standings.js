@@ -3,6 +3,7 @@ import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.13.0/f
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   where,
@@ -33,12 +34,27 @@ const EVENT_CONFIG = {
 const el = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const state = {
-  glass: { event: null, draw: null, resolved: false, selectedId: '' },
-  bonus: { event: null, draw: null, resolved: false, selectedId: '' },
+  glass: {
+    event: null,
+    draw: null,
+    resolved: false,
+    selectedId: '',
+    candidateCount: 0,
+    selectedScoredMatches: 0,
+  },
+  bonus: {
+    event: null,
+    draw: null,
+    resolved: false,
+    selectedId: '',
+    candidateCount: 0,
+    selectedScoredMatches: 0,
+  },
 };
 const discoveryUnsubs = {};
 const eventUnsubs = {};
 const drawUnsubs = {};
+let discoveryVersion = { glass: 0, bonus: 0 };
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>\'"]/g, (character) => ({
@@ -208,11 +224,15 @@ function renderEventSummary(key) {
   const status = draw
     ? `${stats.scoredMatches} of ${stats.totalMatches} matches scored`
     : 'Waiting for draw';
+  const selectionNote = key === 'glass' && state.glass.candidateCount > 1
+    ? `<div class="small" style="margin-top:6px">Using the scored Glass Court record (${state.glass.selectedScoredMatches} matches entered) from ${state.glass.candidateCount} matching records.</div>`
+    : '';
   target.innerHTML = `
     <h2>${escapeHtml(config.title)}</h2>
     <div class="small">${escapeHtml(formatWhen(event))}</div>
     <div class="progress">${stats.scoredMatches}/${stats.totalMatches}</div>
     <div class="small">${escapeHtml(status)} · ${stats.completedRounds}/${stats.totalRounds} rounds complete</div>
+    ${selectionNote}
     <a href="${escapeHtml(eventLink(key))}">Open this event →</a>`;
 }
 
@@ -315,10 +335,48 @@ function subscribeToSelectedEvent(key, eventId) {
   );
 }
 
+async function selectBestEvent(key, events, version) {
+  if (key !== 'glass' || events.length === 1) {
+    return {
+      event: events[0],
+      scoredMatches: 0,
+    };
+  }
+
+  const evaluated = await Promise.all(events.map(async (event) => {
+    try {
+      const drawSnapshot = await getDoc(
+        doc(db, 'padelEvents', event.id, 'tournament', 'draw'),
+      );
+      const draw = drawSnapshot.exists() ? drawSnapshot.data() : null;
+      const stats = calculateEventStats(draw);
+      return {
+        event,
+        scoredMatches: stats.scoredMatches,
+        completedRounds: stats.completedRounds,
+      };
+    } catch (error) {
+      console.warn('Could not inspect candidate Glass Court draw', event.id, error);
+      return { event, scoredMatches: -1, completedRounds: -1 };
+    }
+  }));
+
+  if (discoveryVersion[key] !== version) return null;
+
+  evaluated.sort((a, b) =>
+    b.scoredMatches - a.scoredMatches ||
+    b.completedRounds - a.completedRounds ||
+    timestampMillis(b.event.dateTime) - timestampMillis(a.event.dateTime) ||
+    timestampMillis(b.event.createdAt) - timestampMillis(a.event.createdAt),
+  );
+  return evaluated[0];
+}
+
 function discoverEvent(key) {
   const config = EVENT_CONFIG[key];
   const explicitId = params.get(config.param);
   if (explicitId) {
+    state[key].candidateCount = 1;
     state[key].resolved = true;
     subscribeToSelectedEvent(key, explicitId);
     return;
@@ -326,7 +384,8 @@ function discoverEvent(key) {
 
   discoveryUnsubs[key] = onSnapshot(
     query(collection(db, 'padelEvents'), where('tournamentFormat', '==', config.format)),
-    (snapshot) => {
+    async (snapshot) => {
+      const version = ++discoveryVersion[key];
       state[key].resolved = true;
       const events = snapshot.docs
         .map((document) => ({ id: document.id, ...document.data() }))
@@ -334,16 +393,22 @@ function discoverEvent(key) {
           timestampMillis(b.createdAt) - timestampMillis(a.createdAt) ||
           timestampMillis(b.dateTime) - timestampMillis(a.dateTime),
         );
+      state[key].candidateCount = events.length;
 
       if (!events.length) {
         clearEventSubscriptions(key);
         state[key].selectedId = '';
         state[key].event = null;
         state[key].draw = null;
+        state[key].selectedScoredMatches = 0;
         render();
         return;
       }
-      subscribeToSelectedEvent(key, events[0].id);
+
+      const selected = await selectBestEvent(key, events, version);
+      if (!selected || discoveryVersion[key] !== version) return;
+      state[key].selectedScoredMatches = Math.max(0, selected.scoredMatches || 0);
+      subscribeToSelectedEvent(key, selected.event.id);
       render();
     },
     (error) => showSourceError(key, error),
